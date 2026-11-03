@@ -51,6 +51,20 @@ fx     11  Chorus + Reverb            -                 -                 Sine C
 Backups are lossless: every block keeps its raw 64-byte report, so a restore
 is byte-for-byte and future versions can decode more from the same file.
 
+## The editor
+
+The window mirrors the amp: Volume, Gain, Treble, Bass and Voice, the five
+knobs on the real front panel, then the effect blocks. Dragging a knob changes
+the value; the `x` on the knob (or a right-click) removes it again.
+
+`+ knob` lists the front-panel set and, below it, the parameters only direct
+control can reach (mid, presence, master, bias, gate, cabinet, sag, bright...).
+Those hidden ones are labelled as guesses with a hint, because Fender never
+documented them. Every knob, hidden or not, can be removed.
+
+Changes stay local until `Write to amp`, which sends the right frame for each
+parameter (direct control for the amp knobs, block + execute for the rest).
+
 ## Build
 
 Rust 1.75 or newer.
@@ -73,11 +87,15 @@ banks and the model id tables are documented in
 [docs/parameters.md](docs/parameters.md).
 
 ```
-src/protocol.rs   frames, message decoding, dump/preset model, diff, JSON
-src/capture.rs    USBPcap (.pcap) reader for offline work
-src/models.rs     DSP model id -> name tables
-src/transport.rs  hidapi device discovery and I/O
-src/main.rs       CLI
+src/main.rs        entry point
+src/cli/           scan, dump, replay, apply, param/probe, restore
+src/protocol/      frames, message decoding, dump/preset model, diff, JSON
+src/params.rs      direct-control frames, magic table, knob catalogue
+src/capture.rs     USBPcap (.pcap) reader for offline work
+src/models.rs      DSP model id -> name tables
+src/transport.rs   hidapi device discovery and I/O
+src/ui/            egui editor: app state, panels, widgets, faceplate
+src/windows.rs     console detach and error dialog
 ```
 
 ## Roadmap
@@ -90,10 +108,11 @@ src/main.rs       CLI
 - [x] Live polling mode for parameter mapping (`learn`)
 - [x] Raw frame send, single-byte apply, whole-backup restore (dry run first)
 - [x] Confirm transport and write direction on hardware (block + `1c 03`)
-- [ ] Map the remaining parameter offsets (`scx2 learn`)
+- [x] Map the amp parameters through direct control (`param`, `probe`)
+- [x] Desktop editor with real knobs and optional hidden controls
+- [ ] Map the stomp/mod/delay/reverb offsets (`scx2 learn`)
 - [ ] Store/rename presets (needs the save frame)
 - [ ] Load/save Fender FUSE `.fuse` preset files
-- [ ] GUI
 
 ## Safety
 

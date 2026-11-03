@@ -1,15 +1,58 @@
 # Parameter map
 
-Amp blocks (kind `0x05`) carry 32 parameter bytes at offsets 32..63. The
-`scx2 learn` command fills in the missing rows below: it polls the live buffer
-and prints which offsets move when you turn one knob.
+Amp blocks (kind `0x05`) carry 32 parameter bytes at offsets 32..63. The amp
+front panel only exposes five of them; the rest are reachable through the
+Mustang-style direct-control frame (`scx2 param` / `scx2 probe`).
 
-## What is already known
+Everything below was measured on a Super Champ X2 (fw `May 30 2013`) with
+`scx2 probe --from 0 --to 20 --value 64 --yes`, which writes each parameter
+and reports the block offsets that changed.
 
-### Offset 44..46, voice index
+## Direct-control map
 
-The same value appears at 44, 45 and 46 and it selects the amp voice. Taken
-from the reference capture:
+| Index | Offset(s) | Name | Front panel | Notes |
+| --- | --- | --- | --- | --- |
+| `0x00` | 32 | Volume | yes | channel volume |
+| `0x01` | 33 | Gain | yes | input gain |
+| `0x02` | 34 | Gain 2 | no | second gain stage |
+| `0x03` | 35 | Master | no | output level |
+| `0x04` | 36 | Treble | yes | tone stack |
+| `0x05` | 37 | Mid | no | tone stack |
+| `0x06` | 38 | Bass | yes | tone stack |
+| `0x07` | 39 | Presence | no | power-amp feedback |
+| `0x08` | 40 | Amp 8 | no | undocumented; writes cleanly |
+| `0x09` | 41 + 47 | Gate depth | no | also moves the gate pair |
+| `0x0a` | 42 | Bias | no | power-amp bias |
+| `0x0f` | 41, 47, 48 | Noise gate | no | gate on/off plus threshold |
+| `0x10` | 47, 48 | Gate threshold | no | 16-bit pair, big endian |
+| `0x11` | 49 | Cabinet | no | speaker/cab model |
+| `0x13` | 51 | Sag | no | supply sag |
+| `0x14` | 52 | Bright | no | inverted: low = bright on |
+
+Indices `0x0b`..`0x0e` produced no change on the SCX2, so they are not offered.
+
+`44..46` holds the voice index (same value three times) and is written with a
+normal block write, not direct control. `47`/`48` behave as one 16-bit gate
+threshold and are written as a block too.
+
+### Guessed hidden knobs
+
+The editor offers the five front-panel knobs by default and puts the rest
+behind the `+ knob` menu. Their hints are guesses based on the Mustang
+parameter names in `docs/reference/amp.h`:
+
+- **Gain 2** - second gain stage, used by the Supersonic-style voices.
+- **Master** - output-stage level; the SCX2 has no master knob.
+- **Mid**, **Presence** - tone controls the SCX2 panel omits.
+- **Amp 8** - no Mustang equivalent; possibly a resonance/presence trim.
+- **Gate depth**, **Gate threshold** - noise gate.
+- **Bias**, **Sag**, **Bright** - power-amp behaviour.
+- **Cabinet** - speaker cabinet model.
+
+Treat them as experiments: changing one is safe (the amp restores the value on
+preset recall) but the name may not match what you hear.
+
+## Voice index (offsets 44..46)
 
 | Value | Voice | `model` id |
 | --- | --- | --- |
@@ -28,57 +71,27 @@ from the reference capture:
 | `0x0c` | '57 Champ | `0x007c` |
 | `0x0d` | JazzMaster | `0x00ea` |
 
-### Offsets 34..42, tone stack
+## Writing a parameter
 
-These move between presets and are centred on `0x80`, the same convention the
-Mustang family uses for bipolar parameters. `0x43` (offset 42) is `0x00` on
-every "Clean" preset and `0x80` on the matching "Dirty" one, so it is the
-first candidate for **gain**.
-
-Reference rows from the capture:
+The amp ignores block writes for offsets 32..42, 49, 51 and 52. Those must go
+through the direct-control frame:
 
 ```text
-idx name                 32 33 34 35 36 37 38 39 40 41 42 43 | 44 45 46 47 48 49 50 51
- 1  Tweed Deluxe Clean   00 00 80 80 00 80 00 80 80 80 00 00 | 01 01 01 00 00 01 01 01
- 2  Tweed Deluxe Dirty   00 00 80 80 00 80 00 80 80 80 80 00 | 01 01 01 00 00 01 01 01
- 6  '65 Deluxe           00 00 00 ff 00 cf 00 00 00 80 00 00 | 03 03 03 00 00 03 03 01
- 7  '65 Twin             00 00 80 63 00 bb 00 80 80 80 80 00 | 05 05 05 00 00 09 05 01
-16  Clean Channel        00 00 00 00 00 ff 00 00 00 00 00 00 | 00 00 00 00 00 00 00 01
+05 c3 02 <model lo> <model hi> <index> <index> 0c 00 <magic lo> <magic hi>
 ```
 
-Only the deltas between Clean and Dirty are certain so far. Everything else
-needs a knob turn on real hardware.
+`magic = round(byte * 257)`, so an offset byte round-trips exactly. `scx2
+apply` and the editor both pick this path automatically; `scx2 param` sends
+one frame directly.
 
-### Offsets 49 and 50
-
-Byte 50 tracks the voice index on most presets but not all (`'65 Twin` has 49
-= `09`, 50 = `05`; `British '70s` has 49 = `06`, 50 = `0b`), which suggests 49
-is a cabinet/speaker id and 50 the amp model. Unverified.
-
-### Offset 51
-
-Always `0x01` in the capture. Probably an "enabled" flag.
-
-## Knob map (to fill during the test session)
-
-Run `scx2 learn`, turn one knob, write down the offsets it reports.
-
-| Control | Offset | Range seen | Notes |
-| --- | --- | --- | --- |
-| Volume | | | |
-| Gain | | | |
-| Treble | | | |
-| Bass | | | |
-| Voice | 44,45,46 | 0x00..0x0d | already known |
-| FX level | | | |
-| Reverb | | | |
+After an execute frame the amp reports byte 7 as `0x01` on every block. That
+is expected and excluded from `scx2 diff` output.
 
 ## Other blocks
 
 Every block repeats the same layout: `slot` at 18, model id at 16, parameters
-from 32. The stomp/mod/delay/reverb parameter meanings are still unknown; the
-same `learn` workflow maps them (turn FX level or reverb on the amp, or load a
-different effect preset).
+from 32. The stomp/mod/delay/reverb meanings are still unmapped; `scx2 learn`
+is the tool for that (turn a knob on the amp, watch which offsets move).
 
 ## How to read a block
 

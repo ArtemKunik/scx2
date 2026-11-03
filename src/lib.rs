@@ -1,5 +1,6 @@
 pub mod capture;
 pub mod models;
+pub mod params;
 pub mod protocol;
 pub mod transport;
 
