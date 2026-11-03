@@ -50,9 +50,9 @@ Layout:
 0x000  16  MD5 of everything from 0x010 to the end of the file
 0x010   4  "FMIC"
 0x014   3  01 02 03          target ids (SCX2 differs from every other .upd)
-0x01a  10  "May 30 2013"     firmware build string
-0x02d  10  "SuperChampX2"    product name
-0x044   6  "fender"
+0x01a  11  "May 30 2013"     firmware build string
+0x02a  12  "SuperChampX2"    product name
+0x04a   6  "fender"
 0x05a      "Designed in Scottsdale Arizona USA. Copyright (c) May 30 2013 ..."
 0x110      raw ARM Cortex-M image (229,436 bytes)
 ```

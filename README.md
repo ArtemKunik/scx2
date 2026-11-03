@@ -84,8 +84,9 @@ The amp is a composite HID device (`1ED8:000E`) with a vendor-defined HID
 interface carrying 64-byte reports. The frame layout, the handshake, the three
 banks and the model id tables are documented in
 [docs/protocol.md](docs/protocol.md); the known parameters in
-[docs/parameters.md](docs/parameters.md); and the firmware that ships inside
-FUSE 2.7.1 in [docs/firmware.md](docs/firmware.md).
+[docs/parameters.md](docs/parameters.md); the firmware that ships inside
+FUSE 2.7.1 in [docs/firmware.md](docs/firmware.md); and what is inside that
+firmware image in [docs/firmware-voices.md](docs/firmware-voices.md).
 
 ```
 src/main.rs        entry point
