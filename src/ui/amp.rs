@@ -3,12 +3,11 @@
 use eframe::egui::{self, Align2, Color32, FontId, Rect, Sense, Ui, Vec2};
 
 use crate::models;
-use crate::params;
 use crate::protocol::{self, Kind};
 
-use super::app::Knob;
 use super::faceplate::{effect_card, paint_faceplate};
 use super::knobs::knob_menu;
+use super::knobs::{add_knob, remove_knob};
 use super::widgets::{knob_range, knob_value_label, knob_widget, param_cell};
 use super::worker::Cmd;
 use super::{bank_name, stroke, App, ACCENT, BAD, EDITED, MUTED, PANEL, TEXT, TOLEX};
@@ -168,7 +167,7 @@ impl App {
                         });
                     }
                     if let Some(offset) = remove {
-                        self.knobs.retain(|knob| knob.offset != offset);
+                        remove_knob(&mut self.knobs, offset);
                     }
                 });
 
@@ -228,16 +227,7 @@ impl App {
     }
 
     pub(crate) fn add_knob_at(&mut self, offset: usize) {
-        if self.knobs.iter().any(|k| k.offset == offset) {
-            return;
-        }
-        if self.knobs.len() >= 10 {
-            return;
-        }
-        self.knobs.push(Knob {
-            offset,
-            label: params::offset_title(offset).unwrap_or_else(|| format!("P{offset}")),
-        });
+        add_knob(&mut self.knobs, offset);
     }
 
     pub(crate) fn effects(&mut self, ui: &mut Ui, preset: &protocol::Preset) {
