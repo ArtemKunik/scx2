@@ -73,17 +73,6 @@ pub(super) fn paint_grille(
         Color32::TRANSPARENT,
     );
 
-    // The classic script wordmark, in the era's metal.
-    spaced_italic(
-        &cloth,
-        grille.left_top() + Vec2::new(20.0, 16.0),
-        Align2::LEFT_TOP,
-        "Fender",
-        semibold(21.0),
-        look.piping,
-        0.4,
-    );
-
     // A small model plate, riveted to the cloth.
     let plate = Rect::from_min_max(
         grille.right_bottom() + Vec2::new(-190.0, -48.0),
