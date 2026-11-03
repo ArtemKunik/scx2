@@ -54,11 +54,11 @@ is byte-for-byte and future versions can decode more from the same file.
 ## The editor
 
 The window mirrors the amp: Volume, Gain, Treble, Bass and Voice, the five
-knobs on the real front panel, then the effect blocks. Dragging a knob changes
+knobs on the real front panel, plus Middle from FUSE, then the effect blocks. Dragging a knob changes
 the value; the `x` on the knob (or a right-click) removes it again.
 
 `+ knob` lists the front-panel set and, below it, the parameters only direct
-control can reach (mid, presence, master, bias, gate, cabinet, sag, bright...).
+control can reach (presence, master, bias, gate, cabinet, sag, bright...).
 Those hidden ones are labelled as guesses with a hint, because Fender never
 documented them. Every knob, hidden or not, can be removed.
 
@@ -84,7 +84,8 @@ The amp is a composite HID device (`1ED8:000E`) with a vendor-defined HID
 interface carrying 64-byte reports. The frame layout, the handshake, the three
 banks and the model id tables are documented in
 [docs/protocol.md](docs/protocol.md); the known parameters in
-[docs/parameters.md](docs/parameters.md).
+[docs/parameters.md](docs/parameters.md); and the firmware that ships inside
+FUSE 2.7.1 in [docs/firmware.md](docs/firmware.md).
 
 ```
 src/main.rs        entry point
