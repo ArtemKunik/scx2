@@ -8,7 +8,7 @@ use eframe::egui::{self, Align2, Color32, Id, Margin, Ui};
 
 use super::art::Art;
 use super::cabinet::{panel_layout, CABINET_PAD};
-use super::chain::{pedals, PEDAL_H};
+use super::chain::PEDAL_H;
 use super::theme::*;
 use super::App;
 
@@ -125,7 +125,7 @@ impl App {
                         ui.spacing_mut().item_spacing.y = 0.0;
                         self.amp(ui, art, &preset, width, panel_h, grille_h);
                         ui.add_space(18.0);
-                        pedals(ui, &preset, width);
+                        self.pedals(ui, art, &preset, width);
                         ui.add_space(14.0);
                         self.parameters(ui, &preset, width);
                     });

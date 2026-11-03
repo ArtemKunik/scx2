@@ -10,9 +10,10 @@ use eframe::egui;
 use eframe::CreationContext;
 
 use crate::capture;
-use crate::protocol::{self, Dump, BANK_AMP, BANK_FX, BANK_LIVE};
+use crate::protocol::{Dump, BANK_AMP, BANK_FX, BANK_LIVE};
 
 use super::art::Art;
+use super::sync::Activity;
 use super::worker::{spawn_worker, Cmd, Ev};
 use super::{theme, DEMO_CAPTURE};
 // ---------------------------------------------------------------------------
@@ -37,10 +38,13 @@ pub struct App {
     pub(crate) banner: Option<String>,
     pub(crate) status: String,
     pub(crate) error: Option<String>,
-    pub(crate) polling: bool,
-    pub(crate) last_live: Option<Dump>,
     pub(crate) flash: BTreeMap<usize, f32>,
-    pub(crate) learn_log: Vec<String>,
+    pub(crate) activity: Vec<Activity>,
+    /// The parameter a person is dragging right now; the amp must not move it.
+    pub(crate) active_offset: Option<usize>,
+    /// False until the first dump from the amp arrives.
+    pub(crate) synced: bool,
+    ctx: egui::Context,
     pub(crate) connecting: bool,
     pub(crate) show_params: bool,
     pub(crate) art: Option<Rc<Art>>,
@@ -73,6 +77,10 @@ impl App {
                     label: "Treble".into(),
                 },
                 Knob {
+                    offset: 37,
+                    label: "Middle".into(),
+                },
+                Knob {
                     offset: 38,
                     label: "Bass".into(),
                 },
@@ -87,10 +95,11 @@ impl App {
             banner: None,
             status: "Not connected".into(),
             error: None,
-            polling: false,
-            last_live: None,
             flash: BTreeMap::new(),
-            learn_log: Vec::new(),
+            activity: Vec::new(),
+            active_offset: None,
+            synced: false,
+            ctx: cc.egui_ctx.clone(),
             connecting: false,
             show_params: false,
             art: None,
@@ -135,7 +144,7 @@ impl App {
     }
 
     pub(crate) fn pick_default_preset(&mut self) {
-        let wanted = [(BANK_AMP, 1u8), (BANK_LIVE, 0), (BANK_FX, 0)];
+        let wanted = [(BANK_LIVE, 0u8), (BANK_AMP, 1), (BANK_FX, 0)];
         for key in wanted {
             if self.dump.get(key.0, key.1).is_some() {
                 self.selected = key;
@@ -150,10 +159,11 @@ impl App {
     pub(crate) fn connect(&mut self, path: Option<String>) {
         let (ev_tx, ev_rx) = channel();
         let (cmd_tx, cmd_rx) = channel();
-        spawn_worker(path, ev_tx, cmd_rx);
+        spawn_worker(path, ev_tx, cmd_rx, self.ctx.clone());
         self.tx = Some(cmd_tx);
         self.rx = Some(ev_rx);
         self.connecting = true;
+        self.synced = false;
         self.error = None;
         self.status = "Connecting…".into();
     }
@@ -171,15 +181,12 @@ impl App {
                     self.connecting = false;
                     self.banner = banner;
                     self.source = "Super Champ X2 (1ed8:000e)".into();
-                    self.status = "Connected".into();
+                    self.status = "Connected. Knobs follow the amp.".into();
                 }
-                Ev::Dump(dump) => {
-                    self.handle_live_dump(dump);
-                }
-                Ev::Written(count) => {
-                    self.original = self.dump.clone();
-                    self.status = format!("Wrote {count} change(s) to the amp");
-                }
+                Ev::Dump(dump) => self.on_dump(dump),
+                Ev::Live(live) => self.on_live(*live),
+                Ev::Knob { offset, value } => self.on_knob(offset, value),
+                Ev::Warning(message) => self.error = Some(message),
                 Ev::Error(message) => {
                     self.connected = false;
                     self.connecting = false;
@@ -192,64 +199,8 @@ impl App {
         if self.connecting {
             ctx.request_repaint_after(Duration::from_millis(50));
         }
-        if self.polling {
-            ctx.request_repaint_after(Duration::from_millis(200));
-        }
         if !self.flash.is_empty() {
             ctx.request_repaint_after(Duration::from_millis(33));
-        }
-    }
-
-    pub(crate) fn handle_live_dump(&mut self, dump: Dump) {
-        if self.polling {
-            if let (Some(previous), Some(current)) =
-                (self.last_live.as_ref().and_then(Dump::live), dump.live())
-            {
-                let changes = protocol::diff_presets(previous, current);
-                for change in &changes {
-                    if change.offset >= protocol::OFF_PARAMS {
-                        self.flash.insert(change.offset, 1.4);
-                    }
-                }
-                if !changes.is_empty() {
-                    let mut line = String::new();
-                    for change in changes.iter().take(6) {
-                        line.push_str(&format!("{}  ", change.line()));
-                    }
-                    self.learn_log.push(line);
-                    if self.learn_log.len() > 8 {
-                        self.learn_log.remove(0);
-                    }
-                }
-            }
-            self.last_live = Some(dump.clone());
-            // Do not clobber local edits while polling.
-            if protocol::diff_dumps(&self.original, &self.dump).is_empty() {
-                self.dump = dump;
-                self.original = self.dump.clone();
-            }
-            return;
-        }
-
-        self.dump = dump;
-        self.original = self.dump.clone();
-        self.last_live = Some(self.dump.clone());
-        self.pick_default_preset();
-    }
-
-    pub(crate) fn toggle_poll(&mut self) {
-        self.polling = !self.polling;
-        if self.polling {
-            self.show_params = true;
-        }
-        if let Some(tx) = &self.tx {
-            let _ = tx.send(Cmd::Poll(self.polling));
-        }
-        if self.polling {
-            self.learn_log.clear();
-            self.status = "Learning: turn one knob on the amp".into();
-        } else {
-            self.status = "Learning stopped".into();
         }
     }
 

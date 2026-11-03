@@ -109,3 +109,24 @@ pub fn model_name(kind: Kind, id: u16) -> Option<&'static str> {
         .find(|(model, _)| *model == id)
         .map(|(_, name)| *name)
 }
+
+/// Amp model selected by a voice index (block offsets 44..46); 0 when unknown.
+pub fn voice_model_id(index: u8) -> u16 {
+    match index {
+        0x00 => 0x00eb,
+        0x01 => 0x0067,
+        0x02 => 0x0064,
+        0x03 => 0x0053,
+        0x04 => 0x006a,
+        0x05 => 0x0075,
+        0x06 => 0x0072,
+        0x07 => 0x0061,
+        0x08 => 0x006d,
+        0x09 => 0x005e,
+        0x0a => 0x005d,
+        0x0b => 0x0079,
+        0x0c => 0x007c,
+        0x0d => 0x00ea,
+        _ => 0,
+    }
+}

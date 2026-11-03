@@ -1,4 +1,4 @@
-//! The raw parameter grid and the Learn panel, behind a disclosure.
+//! The raw parameter grid and recent changes, behind a disclosure.
 
 use eframe::egui::{
     self, Align2, CursorIcon, FontId, Id, Margin, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2,
@@ -9,7 +9,7 @@ use super::knobs::add_knob;
 use super::theme::*;
 use super::App;
 use crate::params;
-use crate::protocol::{self, Kind};
+use crate::protocol::{self, Kind, BANK_LIVE};
 
 impl App {
     pub(super) fn parameters(&mut self, ui: &mut Ui, preset: &protocol::Preset, width: f32) {
@@ -54,13 +54,15 @@ impl App {
         self.parameter_grid(ui, preset, width);
         ui.add_space(8.0);
         ui.label(
-            egui::RichText::new("Drag a cell to change it. Right-click to add it to the panel.")
-                .font(regular(11.5))
-                .color(TEXT_3),
+            egui::RichText::new(
+                "Drag a cell on the Live Buffer to change it. Right-click to add it to the panel.",
+            )
+            .font(regular(11.5))
+            .color(TEXT_3),
         );
-        if self.polling || !self.learn_log.is_empty() {
+        if !self.activity.is_empty() {
             ui.add_space(14.0);
-            self.learn_panel(ui);
+            self.activity_panel(ui);
         }
         ui.add_space(8.0);
     }
@@ -74,6 +76,7 @@ impl App {
         let before = frame;
         let baseline = self.baseline(preset);
 
+        let editable = !self.connected || preset.bank == BANK_LIVE;
         let cell_width = |columns: usize| (width - GAP * (columns as f32 - 1.0)) / columns as f32;
         let columns = [16usize, 8, 4]
             .into_iter()
@@ -95,7 +98,11 @@ impl App {
                         &mut frame[offset],
                         baseline[offset],
                         flash,
+                        editable,
                     );
+                    if response.dragged() {
+                        self.active_offset = Some(offset);
+                    }
                     if response.secondary_clicked() {
                         bind = Some(offset);
                     }
@@ -110,7 +117,7 @@ impl App {
         self.commit(&frame, &before);
     }
 
-    fn learn_panel(&mut self, ui: &mut Ui) {
+    fn activity_panel(&mut self, ui: &mut Ui) {
         egui::Frame::none()
             .fill(SIDEBAR)
             .rounding(10.0)
@@ -119,28 +126,13 @@ impl App {
                 ui.set_width(ui.available_width());
                 ui.spacing_mut().item_spacing.y = 4.0;
                 ui.label(
-                    egui::RichText::new("Learn")
+                    egui::RichText::new("Recent Changes")
                         .font(semibold(13.0))
                         .color(TEXT),
                 );
-                ui.label(
-                    egui::RichText::new(
-                        "Turn one knob on the amp. The offsets that move are listed here and \
-                         flash in the grid above.",
-                    )
-                    .font(regular(12.0))
-                    .color(TEXT_2),
-                );
-                if self.learn_log.is_empty() {
+                for entry in &self.activity {
                     ui.label(
-                        egui::RichText::new("Waiting for a change…")
-                            .font(regular(12.0))
-                            .color(TEXT_3),
-                    );
-                }
-                for line in &self.learn_log {
-                    ui.label(
-                        egui::RichText::new(line)
+                        egui::RichText::new(entry.line())
                             .font(FontId::monospace(11.5))
                             .color(TEXT),
                     );
@@ -156,8 +148,14 @@ fn param_cell(
     value: &mut u8,
     baseline: u8,
     flash: f32,
+    editable: bool,
 ) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 58.0), Sense::click_and_drag());
+    let sense = if editable {
+        Sense::click_and_drag()
+    } else {
+        Sense::click()
+    };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 58.0), sense);
     drag_value(ui, &response, value, 255.0, 1.2);
 
     let painter = ui.painter();

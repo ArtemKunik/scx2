@@ -1,12 +1,12 @@
-//! Applying edits locally and pushing them to the amp.
+//! Applying edits locally and sending live ones to the amp.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use crate::params;
-use crate::protocol::{self, Kind};
+use crate::protocol::{self, Kind, BANK_LIVE};
+use crate::{models, params};
 
-use super::worker::Frame;
+use super::worker::Cmd;
 use super::App;
 
 impl App {
@@ -14,61 +14,56 @@ impl App {
         protocol::diff_dumps(&self.original, &self.dump)
     }
 
-    pub(crate) fn write_pending(&mut self) {
-        let mut blocks: BTreeSet<(u8, u8, u8)> = BTreeSet::new();
-        let mut frames: Vec<Frame> = Vec::new();
+    /// Send every edit of the live buffer the moment it happens.
+    pub(crate) fn send_live_edits(&mut self) {
+        let Some(tx) = self.tx.as_ref().filter(|_| self.connected) else {
+            return;
+        };
+        let changes: Vec<_> = self
+            .pending()
+            .into_iter()
+            .filter(|change| change.bank == BANK_LIVE)
+            .collect();
+        let Some(live) = self.dump.get(BANK_LIVE, 0).filter(|_| !changes.is_empty()) else {
+            return;
+        };
 
-        for change in self.pending() {
+        let model = live
+            .block(Kind::Amp)
+            .and_then(|block| block.model())
+            .unwrap_or(0);
+        let mut blocks = BTreeSet::new();
+        for change in &changes {
             // Parameters the amp drives through direct control ignore block
             // writes; send them the way the front-panel knob does.
-            if change.kind == Kind::Amp {
-                if let Some(param) = params::index_for_offset(change.offset) {
-                    let model = self
-                        .dump
-                        .get(change.bank, change.index)
-                        .and_then(|preset| preset.block(Kind::Amp))
-                        .and_then(|block| block.model())
-                        .unwrap_or(0);
-                    frames.push((
-                        params::direct_control(
-                            model,
-                            param,
-                            params::SELECTOR_AMP,
-                            params::magic_from_byte(change.after),
-                        ),
-                        false,
-                    ));
-                    continue;
+            let param = (change.kind == Kind::Amp)
+                .then(|| params::index_for_offset(change.offset))
+                .flatten();
+            match param {
+                Some(index) => {
+                    let _ = tx.send(Cmd::SetParam {
+                        model,
+                        index,
+                        value: change.after,
+                    });
+                }
+                None => {
+                    blocks.insert(change.kind.code());
                 }
             }
-            blocks.insert((change.bank, change.index, change.kind.code()));
         }
-
-        for (bank, index, code) in blocks {
-            if let Some(message) = self
-                .dump
-                .get(bank, index)
-                .and_then(|preset| preset.block(Kind::from_code(code)))
-            {
-                frames.push((
-                    protocol::as_host_frame(message.as_bytes(), protocol::HOST_CONTROL),
-                    true,
-                ));
+        for code in blocks {
+            if let Some(message) = live.block(Kind::from_code(code)) {
+                let _ = tx.send(Cmd::Block {
+                    code,
+                    frame: protocol::as_host_frame(message.as_bytes(), protocol::HOST_CONTROL),
+                });
             }
         }
 
-        if frames.is_empty() {
-            return;
-        }
-        match &self.tx {
-            Some(tx) if self.connected => {
-                let _ = tx.send(super::worker::Cmd::Write(frames.clone()));
-                self.status = format!("Writing {} change(s)…", frames.len());
-            }
-            _ => {
-                self.error =
-                    Some("No amp connected. Your changes are kept here until you connect.".into());
-            }
+        let sent = live.clone();
+        if let Some(known) = self.original.get_mut(BANK_LIVE, 0) {
+            *known = sent;
         }
     }
 
@@ -89,19 +84,26 @@ impl App {
 
     pub(crate) fn apply_edit(&mut self, kind: Kind, offset: usize, value: u8) {
         let (bank, index) = self.selected;
-        if let Some(preset) = self.dump.get_mut(bank, index) {
-            if let Some(block) = preset.block_mut(kind) {
-                block.set_byte(offset, value);
-            }
-        }
-        // Voice is stored three times; keep the copies in sync.
+        let Some(block) = self
+            .dump
+            .get_mut(bank, index)
+            .and_then(|preset| preset.block_mut(kind))
+        else {
+            return;
+        };
+        block.set_byte(offset, value);
+
+        // Voice is stored three times, and the amp only changes voice when the
+        // model id moves with it (verified on hardware).
         if kind == Kind::Amp && (44..=46).contains(&offset) {
-            if let Some(preset) = self.dump.get_mut(bank, index) {
-                if let Some(block) = preset.block_mut(Kind::Amp) {
-                    for other in [44usize, 45, 46] {
-                        block.set_byte(other, value);
-                    }
-                }
+            for other in [44usize, 45, 46] {
+                block.set_byte(other, value);
+            }
+            let model = models::voice_model_id(value);
+            if model != 0 {
+                let [low, high] = model.to_le_bytes();
+                block.set_byte(protocol::OFF_MODEL, low);
+                block.set_byte(protocol::OFF_MODEL + 1, high);
             }
         }
     }

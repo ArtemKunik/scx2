@@ -1,7 +1,7 @@
 # Parameter map
 
 Amp blocks (kind `0x05`) carry 32 parameter bytes at offsets 32..63. The amp
-front panel only exposes five of them; the rest are reachable through the
+front panel only exposes five of them, FUSE adds Middle; the rest are reachable through the
 Mustang-style direct-control frame (`scx2 param` / `scx2 probe`).
 
 Everything below was measured on a Super Champ X2 (fw `May 30 2013`) with
@@ -17,7 +17,7 @@ and reports the block offsets that changed.
 | `0x02` | 34 | Gain 2 | no | second gain stage |
 | `0x03` | 35 | Master | no | output level |
 | `0x04` | 36 | Treble | yes | tone stack |
-| `0x05` | 37 | Mid | no | tone stack |
+| `0x05` | 37 | Middle | no, FUSE only | tone stack, set per voice |
 | `0x06` | 38 | Bass | yes | tone stack |
 | `0x07` | 39 | Presence | no | power-amp feedback |
 | `0x08` | 40 | Amp 8 | no | undocumented; writes cleanly |
@@ -37,13 +37,13 @@ threshold and are written as a block too.
 
 ### Guessed hidden knobs
 
-The editor offers the five front-panel knobs by default and puts the rest
-behind the `+ knob` menu. Their hints are guesses based on the Mustang
+The editor shows the five front-panel knobs plus Middle by default and puts the rest
+behind the `+` menu on the panel. Their hints are guesses based on the Mustang
 parameter names in `docs/reference/amp.h`:
 
 - **Gain 2** - second gain stage, used by the Supersonic-style voices.
 - **Master** - output-stage level; the SCX2 has no master knob.
-- **Mid**, **Presence** - tone controls the SCX2 panel omits.
+- **Presence** - tone control the SCX2 panel omits.
 - **Amp 8** - no Mustang equivalent; possibly a resonance/presence trim.
 - **Gate depth**, **Gate threshold** - noise gate.
 - **Bias**, **Sag**, **Bright** - power-amp behaviour.

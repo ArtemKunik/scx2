@@ -4,14 +4,16 @@ use eframe::egui::{
     epaint::Shadow, Align2, Color32, Id, Painter, Pos2, Rect, Rounding, Sense, Shape, Ui, Vec2,
 };
 
+use super::ampstyle::{self, Look};
 use super::app::Knob;
 use super::art::{Art, JEWEL_D};
-use super::dial::{can_add, knob_widget, remove_button, DIAL_R};
+use super::dial::{can_add, knob_widget, remove_button, Setting, DIAL_R};
 use super::knobs::remove_knob;
 use super::paint::{full_uv, paint_grille, screw, snapped, spaced, tile, vertical_gradient};
 use super::theme::*;
 use super::App;
-use crate::protocol::{self, Kind};
+use crate::models;
+use crate::protocol::{self, Kind, BANK_LIVE};
 
 pub(super) const CABINET_PAD: f32 = 16.0;
 
@@ -47,6 +49,18 @@ impl App {
         let mut frame = *block.as_bytes();
         let before = frame;
         let baseline = self.baseline(preset);
+        // A stored slot cannot be written yet, so only the live buffer is editable.
+        let editable = !self.connected || preset.bank == BANK_LIVE;
+
+        // The cabinet follows the voice: a '57 Champ is tweed, a '65 Twin is
+        // blackface, and a British voice gets its salt-and-pepper grille.
+        let model = block
+            .model()
+            .filter(|model| *model != 0)
+            .unwrap_or_else(|| models::voice_model_id(frame[44]));
+        let look = ampstyle::for_model(model);
+        let surface = art.surface(look.era);
+        let name = models::model_name(Kind::Amp, model).unwrap_or("Super Champ X2");
 
         let height = CABINET_PAD + panel_h + 14.0 + grille_h + CABINET_PAD;
         let (cabinet, _) = ui.allocate_exact_size(Vec2::new(width, height), Sense::hover());
@@ -62,7 +76,7 @@ impl App {
             }
             .tessellate(cabinet, Rounding::same(16.0)),
         ));
-        tile(&painter, cabinet, 16.0, &art.tolex, art.ppp, Color32::WHITE);
+        tile(&painter, cabinet, 16.0, &surface.tolex, art.ppp, Color32::WHITE);
         painter.rect_stroke(cabinet, 16.0, stroke(1.0, Color32::from_white_alpha(14)));
 
         // control panel in a thin chrome trim
@@ -70,15 +84,15 @@ impl App {
             cabinet.min + Vec2::splat(CABINET_PAD),
             Vec2::new(width - 2.0 * CABINET_PAD, panel_h),
         );
-        painter.rect_filled(panel.expand(1.5), 6.0, Color32::from_rgb(92, 90, 86));
+        painter.rect_filled(panel.expand(1.5), 6.0, look.piping.gamma_multiply(0.62));
         painter.line_segment(
             [
                 panel.left_top() + Vec2::new(4.0, -1.0),
                 panel.right_top() + Vec2::new(-4.0, -1.0),
             ],
-            stroke(1.0, Color32::from_rgb(214, 211, 204)),
+            stroke(1.0, look.piping),
         );
-        tile(&painter, panel, 5.0, &art.panel, art.ppp, Color32::WHITE);
+        tile(&painter, panel, 5.0, &surface.panel, art.ppp, Color32::WHITE);
         let sheen = Rect::from_min_size(panel.min, Vec2::new(panel.width(), 44.0))
             .shrink2(Vec2::new(1.0, 0.0));
         vertical_gradient(
@@ -96,7 +110,7 @@ impl App {
             screw(&painter, corner);
         }
 
-        self.pilot(ui, &painter, art, panel);
+        self.pilot(ui, &painter, art, &look, panel);
 
         // knobs
         let (columns, _) = panel_layout(width, &self.knobs);
@@ -125,18 +139,27 @@ impl App {
                 ui,
                 &painter,
                 art,
+                &look,
                 slot,
                 knob,
-                &mut frame[knob.offset],
-                baseline[knob.offset],
+                Setting {
+                    value: &mut frame[knob.offset],
+                    baseline: baseline[knob.offset],
+                    editable,
+                },
             );
+            if response.dragged() {
+                self.active_offset = Some(knob.offset);
+            }
             response.context_menu(|ui| {
                 if ui.button("Remove from Panel").clicked() {
                     remove = Some(knob.offset);
                     ui.close_menu();
                 }
             });
-            if ui.rect_contains_pointer(slot) && remove_button(ui, &painter, slot, knob.offset) {
+            if ui.rect_contains_pointer(slot)
+                && remove_button(ui, &painter, slot, knob.offset, look.ink)
+            {
                 remove = Some(knob.offset);
             }
         }
@@ -144,7 +167,7 @@ impl App {
             remove_knob(&mut self.knobs, offset);
         }
         if can_add(&self.knobs) {
-            self.add_button(ui, &painter, panel);
+            self.add_button(ui, &painter, panel, look.ink);
         }
 
         // grille cloth
@@ -152,7 +175,7 @@ impl App {
             Pos2::new(panel.left(), panel.bottom() + 14.0),
             Vec2::new(panel.width(), grille_h),
         );
-        paint_grille(&painter, art, grille);
+        paint_grille(&painter, art, &look, grille, name);
 
         self.commit(&frame, &before);
     }
@@ -182,7 +205,7 @@ impl App {
 
     /// The jewel is the connection indicator, exactly as it is on the amp:
     /// lit means alive.
-    fn pilot(&self, ui: &mut Ui, painter: &Painter, art: &Art, panel: Rect) {
+    fn pilot(&self, ui: &mut Ui, painter: &Painter, art: &Art, look: &Look, panel: Rect) {
         let center = Pos2::new(
             panel.left() + PILOT_W / 2.0 + 4.0,
             panel.top() + PANEL_PAD_Y + 20.0 + DIAL_R,
@@ -202,7 +225,7 @@ impl App {
             Align2::CENTER_TOP,
             "POWER",
             semibold(10.5),
-            SILK,
+            look.ink,
             1.4,
         );
 
@@ -217,14 +240,18 @@ impl App {
             full_uv(),
             Color32::from_black_alpha(190),
         );
-        painter.image(art.jewel.id(), rect, full_uv(), Color32::from_gray(shade));
+        painter.image(
+            art.jewel(look.jewel).id(),
+            rect,
+            full_uv(),
+            Color32::from_gray(shade),
+        );
         if level > 0.0 {
-            let bloom = (level * 90.0) as u8;
             painter.image(
                 art.glow.id(),
                 rect.expand(26.0),
                 full_uv(),
-                Color32::from_rgba_premultiplied(bloom, bloom / 6, bloom / 10, 0),
+                look.accent.gamma_multiply(level * 0.45),
             );
         }
 

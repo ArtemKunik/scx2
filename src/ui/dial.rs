@@ -2,12 +2,12 @@
 
 use eframe::egui::{self, Align2, Color32, CursorIcon, Id, Painter, Pos2, Rect, Sense, Ui, Vec2};
 
+use super::ampstyle::Look;
 use super::app::Knob;
 use super::art::{Art, KNOB_D};
-use super::knobs::{add_knob, MAX_KNOBS};
+use super::knobs::MAX_KNOBS;
 use super::paint::{full_uv, snapped, spaced};
 use super::theme::*;
-use super::App;
 use crate::protocol::Kind;
 use crate::{models, params};
 
@@ -26,85 +26,27 @@ pub(super) fn can_add(knobs: &[Knob]) -> bool {
             .any(|spec| knobs.iter().all(|knob| knob.offset != spec.offset))
 }
 
-impl App {
-    pub(super) fn add_button(&mut self, ui: &mut Ui, painter: &Painter, panel: Rect) {
-        let center = panel.right_top() + Vec2::new(-34.0, 26.0);
-        let rect = Rect::from_center_size(center, Vec2::splat(30.0));
-        let popup = Id::new("add-knob-menu");
-        let open = ui.memory(|memory| memory.is_popup_open(popup));
-        let mut response = ui
-            .interact(rect, Id::new("add-knob"), Sense::click())
-            .on_hover_cursor(CursorIcon::PointingHand);
-        if !open {
-            response = response.on_hover_text("Add a knob to the panel");
-        }
-
-        // Stays out of the way until the pointer is on the panel.
-        if open || ui.rect_contains_pointer(panel) {
-            let ink = if response.hovered() || open {
-                SILK
-            } else {
-                SILK_DIM.gamma_multiply(0.7)
-            };
-            painter.circle_stroke(center, 11.0, stroke(1.0, ink));
-            painter.line_segment(
-                [center - Vec2::new(4.5, 0.0), center + Vec2::new(4.5, 0.0)],
-                stroke(1.25, ink),
-            );
-            painter.line_segment(
-                [center - Vec2::new(0.0, 4.5), center + Vec2::new(0.0, 4.5)],
-                stroke(1.25, ink),
-            );
-        }
-
-        if response.clicked() {
-            ui.memory_mut(|memory| memory.toggle_popup(popup));
-        }
-        let mut chosen = None;
-        egui::popup_below_widget(ui, popup, &response, |ui| {
-            ui.set_min_width(170.0);
-            ui.spacing_mut().item_spacing.y = 2.0;
-            // Front-panel knobs first, then what only direct control reaches.
-            for (standard, heading) in [(true, "On the Amp"), (false, "Hidden (Guessed)")] {
-                let mut specs = params::KNOBS
-                    .iter()
-                    .filter(|spec| spec.standard == standard)
-                    .filter(|spec| self.knobs.iter().all(|knob| knob.offset != spec.offset))
-                    .peekable();
-                if specs.peek().is_none() {
-                    continue;
-                }
-                ui.label(
-                    egui::RichText::new(heading)
-                        .font(semibold(11.0))
-                        .color(TEXT_3),
-                );
-                for spec in specs {
-                    if ui
-                        .selectable_label(false, spec.name)
-                        .on_hover_text(spec.hint)
-                        .clicked()
-                    {
-                        chosen = Some(spec);
-                    }
-                }
-            }
-        });
-        if let Some(spec) = chosen {
-            add_knob(&mut self.knobs, spec.offset);
-        }
-    }
+/// A knob's value, what the amp last reported, and whether it may be turned.
+pub(super) struct Setting<'a> {
+    pub(super) value: &'a mut u8,
+    pub(super) baseline: u8,
+    pub(super) editable: bool,
 }
 
 pub(super) fn knob_widget(
     ui: &mut Ui,
     painter: &Painter,
     art: &Art,
+    look: &Look,
     slot: Rect,
     knob: &Knob,
-    value: &mut u8,
-    baseline: u8,
+    setting: Setting<'_>,
 ) -> egui::Response {
+    let Setting {
+        value,
+        baseline,
+        editable,
+    } = setting;
     let center = slot.center_top() + Vec2::new(0.0, 20.0 + DIAL_R);
     let id = Id::new(("knob", knob.offset));
     let voice = (44..=46).contains(&knob.offset);
@@ -113,7 +55,11 @@ pub(super) fn knob_widget(
     let response = ui.interact(
         Rect::from_center_size(center, Vec2::splat(DIAL_R * 1.7)),
         id,
-        Sense::click_and_drag(),
+        if editable {
+            Sense::click_and_drag()
+        } else {
+            Sense::click()
+        },
     );
     drag_value(ui, &response, value, range, range / 170.0);
 
@@ -131,11 +77,11 @@ pub(super) fn knob_widget(
         Align2::CENTER_TOP,
         &knob.label.to_uppercase(),
         semibold(if knob.label.len() > 10 { 9.0 } else { 10.5 }),
-        SILK,
+        look.ink,
         1.4,
     );
 
-    dial_scale(painter, center, voice);
+    dial_scale(painter, center, voice, look.ink);
 
     let body = snapped(Rect::from_center_size(center, Vec2::splat(KNOB_D)), art.ppp);
     painter.image(
@@ -144,9 +90,9 @@ pub(super) fn knob_widget(
         full_uv(),
         Color32::from_black_alpha(235),
     );
-    painter.image(art.knob.id(), body, full_uv(), Color32::WHITE);
+    painter.image(art.knob(look.knob).id(), body, full_uv(), Color32::WHITE);
 
-    // Pointer: white on the black skirt, dark on the silver top.
+    // Pointer: dark on a cream or silver cap, white on a black one.
     let angle = SWEEP_START + (SWEEP_END - SWEEP_START) * t;
     let dir = Vec2::new(angle.cos(), angle.sin());
     let radius = KNOB_D / 2.0;
@@ -155,14 +101,14 @@ pub(super) fn knob_widget(
             center + dir * (radius * 0.72),
             center + dir * (radius * 0.97),
         ],
-        stroke(2.25, Color32::from_rgb(245, 243, 236)),
+        stroke(2.25, look.pointer),
     );
     painter.line_segment(
         [
             center + dir * (radius * 0.2),
             center + dir * (radius * 0.57),
         ],
-        stroke(1.75, Color32::from_rgb(38, 37, 36)),
+        stroke(1.75, look.pointer_shadow),
     );
 
     if response.hovered() || response.dragged() {
@@ -176,7 +122,7 @@ pub(super) fn knob_widget(
     }
 
     let readout = if voice {
-        models::model_name(Kind::Amp, voice_model_id(*value))
+        models::model_name(Kind::Amp, models::voice_model_id(*value))
             .unwrap_or("Unknown")
             .to_string()
     } else {
@@ -191,32 +137,42 @@ pub(super) fn knob_widget(
         } else {
             regular(12.5)
         },
-        if edited { AMBER } else { SILK_DIM },
+        if edited { AMBER } else { look.ink.gamma_multiply(0.72) },
     );
 
     let hint = params::knob_spec(knob.offset)
         .map(|spec| format!("{}\n", spec.hint))
         .unwrap_or_default();
-    response
-        .on_hover_cursor(CursorIcon::ResizeVertical)
-        .on_hover_text(format!(
-            "{}: 0x{value:02x} ({value})\n{hint}Drag to adjust. Hold Shift for fine control.",
-            knob.label,
-            value = *value,
-        ))
+    let (cursor, how) = if editable {
+        (
+            CursorIcon::ResizeVertical,
+            "Drag to adjust. Hold Shift for fine control.",
+        )
+    } else {
+        (
+            CursorIcon::Default,
+            "Stored on the amp. Choose Live Buffer to turn this knob.",
+        )
+    };
+    response.on_hover_cursor(cursor).on_hover_text(format!(
+        "{}: 0x{value:02x} ({value})\n{hint}{how}",
+        knob.label,
+        value = *value,
+    ))
 }
 
 /// Tick marks and numerals silk-screened on the panel around a knob.
-fn dial_scale(painter: &Painter, center: Pos2, voice: bool) {
+fn dial_scale(painter: &Painter, center: Pos2, voice: bool, ink: Color32) {
     let positions = if voice { 14 } else { 11 };
     let radius = KNOB_D / 2.0;
+    let ink = ink.gamma_multiply(0.78);
     for tick in 0..positions {
         let t = tick as f32 / (positions - 1) as f32;
         let angle = SWEEP_START + (SWEEP_END - SWEEP_START) * t;
         let dir = Vec2::new(angle.cos(), angle.sin());
         painter.line_segment(
             [center + dir * (radius + 2.5), center + dir * (radius + 6.0)],
-            stroke(1.0, SILK_DIM),
+            stroke(1.0, ink),
         );
         if !voice {
             painter.text(
@@ -224,7 +180,7 @@ fn dial_scale(painter: &Painter, center: Pos2, voice: bool) {
                 Align2::CENTER_CENTER,
                 tick.to_string(),
                 regular(9.5),
-                SILK_DIM,
+                ink,
             );
         }
     }
@@ -260,14 +216,24 @@ pub(super) fn drag_value(
 }
 
 /// Returns true when clicked.
-pub(super) fn remove_button(ui: &mut Ui, painter: &Painter, slot: Rect, offset: usize) -> bool {
+pub(super) fn remove_button(
+    ui: &mut Ui,
+    painter: &Painter,
+    slot: Rect,
+    offset: usize,
+    base: Color32,
+) -> bool {
     let center = slot.center_top() + Vec2::new(46.0, 9.0);
     let rect = Rect::from_center_size(center, Vec2::splat(18.0));
     let response = ui
         .interact(rect, Id::new(("knob-remove", offset)), Sense::click())
         .on_hover_cursor(CursorIcon::PointingHand)
         .on_hover_text("Remove from panel");
-    let ink = if response.hovered() { SILK } else { SILK_DIM };
+    let ink = if response.hovered() {
+        base
+    } else {
+        base.gamma_multiply(0.7)
+    };
     if response.hovered() {
         painter.circle_filled(center, 9.0, Color32::from_white_alpha(20));
     }
@@ -276,24 +242,4 @@ pub(super) fn remove_button(ui: &mut Ui, painter: &Painter, slot: Rect, offset: 
     let other = Vec2::new(3.5, -3.5);
     painter.line_segment([center - other, center + other], stroke(1.25, ink));
     response.clicked()
-}
-
-fn voice_model_id(index: u8) -> u16 {
-    match index {
-        0x00 => 0x00eb,
-        0x01 => 0x0067,
-        0x02 => 0x0064,
-        0x03 => 0x0053,
-        0x04 => 0x006a,
-        0x05 => 0x0075,
-        0x06 => 0x0072,
-        0x07 => 0x0061,
-        0x08 => 0x006d,
-        0x09 => 0x005e,
-        0x0a => 0x005d,
-        0x0b => 0x0079,
-        0x0c => 0x007c,
-        0x0d => 0x00ea,
-        _ => 0,
-    }
 }

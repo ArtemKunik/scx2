@@ -27,6 +27,8 @@
 //!  32..64  parameters         8-bit, 0x80 = centre for bipolar values
 //! ```
 
+pub use notice::{classify, Notice};
+
 pub const VENDOR_ID: u16 = 0x1ED8;
 pub const PRODUCT_ID: u16 = 0x000E;
 
@@ -59,6 +61,7 @@ mod dump;
 mod frames;
 mod kind;
 mod message;
+mod notice;
 mod preset;
 
 pub use diff::{diff_dumps, diff_presets, Change};

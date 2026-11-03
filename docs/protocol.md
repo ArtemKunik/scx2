@@ -151,12 +151,52 @@ Test that proved it: the live buffer held a `'65 Deluxe` (voice index `0x03` at
 offset 44). Sending offset 44 = `0x00` plus the execute frame, then re-dumping,
 reported `0x00`. Writing `0x03` back restored it.
 
+To change the voice, the model id at offset 16 has to move with the voice bytes.
+Writing offsets 44..46 alone leaves the model where it was; writing both makes a
+later dump report the new model (measured, `0x0053` to `0x006a`). Whether offset
+50 should follow as well is untested.
+
 Side effect: after an execute frame the amp reports byte 7 as `0x01` on every
 amp block (it was `0x00` in the pre-write dump). It does not affect the data,
 but `scx2 diff` will show it after any write session.
 
 The UI and `scx2 apply` / `scx2 restore` send the execute frame automatically;
 `--no-execute` disables it for experiments.
+
+## Reports the amp sends by itself
+
+Captured on hardware (2026-11-03, firmware `May 30 2013`) with `scx2 monitor`,
+without asking the amp for anything. Turning a front-panel knob streams one
+report per step:
+
+```text
+05 01 02 53 00 00 00 0c 00 2d 2d    volume is now 0x2d
+05 01 02 53 00 01 01 0c 00 fe fe    gain is now 0xfe
+```
+
+| Offset | Meaning |
+| --- | --- |
+| 2 | `0x02` for an amp parameter |
+| 3..5 | current amp model id, little endian |
+| 5, 6 | parameter index (direct-control numbering), repeated |
+| 7 | selector, `0x0c` for amp parameters |
+| 9..11 | value, 16-bit little endian; `round(value / 257)` is the block byte |
+
+This is the direct-control frame with direction byte `0x01` instead of `0xc3`.
+Only volume and gain have been seen this way so far. The field names match
+[OpenFUSE](https://github.com/dbarbashov/openfuse)'s reading of FUSE 2.7.1, which
+is where the `KnobPosition` meaning of `1d` below comes from.
+
+Other reports:
+
+| Report | Meaning | Status |
+| --- | --- | --- |
+| `00 00 05 <status>` | answer to a direct-control write, about 1 ms later; 0 means accepted. The value is not echoed | measured |
+| `1d 01 01 <n>`, `1d 01 02 <n>` | selector knob position (`n` = 6 and 5 with `'65 Deluxe` live) | sent at the end of a dump; whether they also arrive when the knob turns is untested |
+
+`ff c5`, which FUSE uses to ask for the current preset only, returns the full
+dump on this amp (195 reports, about 1.9 s), so a dump is always the slow path.
+The live buffer does come first, within the first few reports.
 
 ## Still unknown
 
@@ -168,9 +208,10 @@ The UI and `scx2 apply` / `scx2 restore` send the execute frame automatically;
   a time while `scx2 learn` is running.
 * **Renaming a preset.** The name lives in the `0x04` block; whether writing it
   back with the execute frame renames a stored slot is untested.
-* **The trailing notification reports**: `05 01 05 2b ...`, `05 01 06 24 ...`,
-  `1d 01 01 ...`, `1d 01 02 07 ...` and `1f 01 00 24 ...`. They look like
-  "current fx model" and "global state" announcements.
+* **The rest of the trailing reports**: `1f 01 00 24 ...` and the `05 01 05` /
+  `05 01 06` effect values at the end of a dump. See
+  [Reports the amp sends by itself](#reports-the-amp-sends-by-itself) for the
+  ones that are understood.
 
 ## Recording your own capture
 

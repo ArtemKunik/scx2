@@ -1,15 +1,23 @@
 //! Desktop UI (egui), started by `scx2 ui`.
 
+mod ampstyle;
 mod app;
 mod art;
 mod cabinet;
 mod chain;
 mod dial;
 mod edits;
+mod fx;
+mod hardware;
 mod knobs;
 mod paint;
 mod parameters;
+mod parts;
+mod units;
+mod pedal;
 mod sidebar;
+mod sync;
+mod texture;
 mod theme;
 mod toolbar;
 mod view;
@@ -44,9 +52,11 @@ impl eframe::App for App {
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
         self.elapsed_flash(dt);
         self.pump(ctx);
+        self.active_offset = None;
         handle_drops(self, ctx);
         let art = current_art(self, ctx);
         view::show(self, ctx, &art);
+        self.send_live_edits();
     }
 }
 

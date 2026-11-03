@@ -57,13 +57,16 @@ The window mirrors the amp: Volume, Gain, Treble, Bass and Voice, the five
 knobs on the real front panel, plus Middle from FUSE, then the effect blocks. Dragging a knob changes
 the value; the `x` on the knob (or a right-click) removes it again.
 
-`+ knob` lists the front-panel set and, below it, the parameters only direct
+The `+` on the panel lists the front-panel set and, below it, the parameters only direct
 control can reach (presence, master, bias, gate, cabinet, sag, bright...).
 Those hidden ones are labelled as guesses with a hint, because Fender never
 documented them. Every knob, hidden or not, can be removed.
 
-Changes stay local until `Write to amp`, which sends the right frame for each
-parameter (direct control for the amp knobs, block + execute for the rest).
+The knobs stay in sync with the amp. Turning a knob on the amp moves it on
+screen, and dragging one on the Live Buffer changes the sound straight away, so
+there is no write button. Stored presets are read-only while connected, because
+the command that saves to a slot is still unknown. Without an amp you can edit
+a backup and save it.
 
 ## Build
 
@@ -130,6 +133,9 @@ verified; a power cycle discards it.
 * Model id tables and the Mustang framing reference:
   [snhirsch/mustang-midi-bridge](https://github.com/snhirsch/mustang-midi-bridge) (GPL-3.0),
   `docs/reference/` keeps the relevant source files for reference.
+* [OpenFUSE](https://github.com/dbarbashov/openfuse) (MIT) pointed to the meaning
+  of the `0x05` and `0x1d` reports and the write acknowledgement; they were then
+  checked on real hardware where noted in `docs/protocol.md`.
 * Fender FUSE on modern Windows:
   [the wiki page](https://fender-mustang-amps-and-fuse.fandom.com/wiki/Fender_Fuse_on_Windows_11).
 

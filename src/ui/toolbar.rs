@@ -6,9 +6,8 @@ use eframe::egui::{
 
 use super::paint::elided;
 use super::theme::*;
-use super::worker::Cmd;
 use super::App;
-use crate::protocol::{Kind, BANK_AMP, BANK_FX, BANK_LIVE};
+use crate::protocol::{BANK_AMP, BANK_FX, BANK_LIVE};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum ButtonKind {
@@ -67,15 +66,6 @@ pub(super) fn tool_button(
 }
 
 impl App {
-    /// Changes as a person counts them. Voice is stored in three bytes that
-    /// always move together, so it counts once.
-    fn pending_count(&self) -> usize {
-        self.pending()
-            .iter()
-            .filter(|change| !(change.kind == Kind::Amp && matches!(change.offset, 45 | 46)))
-            .count()
-    }
-
     pub(super) fn toolbar(&mut self, ui: &mut Ui) {
         let key = self.selected;
         let preset = self.dump.get(key.0, key.1);
@@ -85,14 +75,18 @@ impl App {
             Some(preset) => format!("Preset {}", preset.index),
             None => "No preset selected".to_string(),
         };
+        let saved = if self.connected {
+            ". Stored on the amp, read-only here"
+        } else {
+            ""
+        };
         let place = match key.0 {
             BANK_LIVE => "What the amp is playing now".to_string(),
-            BANK_AMP => format!("Amp preset {}", key.1),
-            BANK_FX => format!("FX preset {}", key.1),
+            BANK_AMP => format!("Amp preset {}{saved}", key.1),
+            BANK_FX => format!("FX preset {}{saved}", key.1),
             _ => String::new(),
         };
 
-        let pending = self.pending_count();
         ui.horizontal_centered(|ui| {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
@@ -101,62 +95,17 @@ impl App {
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let label = match pending {
-                    0 => "Write to Amp".to_string(),
-                    1 => "Write 1 Change".to_string(),
-                    count => format!("Write {count} Changes"),
-                };
-                let can_write = pending > 0 && self.connected;
-                let kind = if can_write {
-                    ButtonKind::Primary
-                } else {
-                    ButtonKind::Plain
-                };
-                let write = tool_button(ui, &label, can_write, kind);
-                if write.clicked() {
-                    self.write_pending();
-                }
-                if pending > 0 && !self.connected {
-                    write.on_hover_text("Connect the amp to write these changes.");
-                } else if pending == 0 {
-                    write.on_hover_text("Nothing to write yet. Turn a knob first.");
-                }
-                if pending > 0 && tool_button(ui, "Revert", true, ButtonKind::Plain).clicked() {
-                    self.dump = self.original.clone();
-                    self.status = "Changes reverted".into();
-                }
-
-                ui.add_space(12.0);
-
-                let learn_kind = if self.polling {
-                    ButtonKind::Active
-                } else {
-                    ButtonKind::Plain
-                };
-                let learn_label = if self.polling {
-                    "Stop Learning"
-                } else {
-                    "Learn"
-                };
-                let learn =
-                    tool_button(ui, learn_label, self.connected || self.polling, learn_kind);
-                let learn_clicked = learn.clicked();
-                learn.on_hover_text("Turn a knob on the amp to see which parameter it moves.");
-                if learn_clicked {
-                    self.toggle_poll();
-                }
-
                 if tool_button(ui, "Save Backup", true, ButtonKind::Plain).clicked() {
                     self.save_backup();
                 }
-                let refresh = tool_button(ui, "Refresh", self.connected, ButtonKind::Plain);
-                if refresh.clicked() {
-                    if let Some(tx) = &self.tx {
-                        let _ = tx.send(Cmd::Refresh);
-                        self.status = "Reading presets from the amp…".into();
-                    }
+                // Without an amp, edits are made to a backup and can be undone.
+                if !self.connected
+                    && !self.pending().is_empty()
+                    && tool_button(ui, "Revert", true, ButtonKind::Plain).clicked()
+                {
+                    self.dump = self.original.clone();
+                    self.status = "Changes reverted".into();
                 }
-                refresh.on_hover_text("Read every preset from the amp again.");
             });
         });
     }

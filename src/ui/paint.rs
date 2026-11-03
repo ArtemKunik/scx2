@@ -8,6 +8,7 @@ use eframe::egui::{
     Align2, Color32, FontId, Mesh, Painter, Pos2, Rect, Shape, TextureHandle, Vec2,
 };
 
+use super::ampstyle::Look;
 use super::art::Art;
 use super::theme::*;
 
@@ -30,16 +31,25 @@ pub(super) fn screw(painter: &Painter, center: Pos2) {
     );
 }
 
-pub(super) fn paint_grille(painter: &Painter, art: &Art, grille: Rect) {
-    painter.rect_filled(grille.expand(1.5), 5.0, Color32::from_rgb(8, 8, 8));
+pub(super) fn paint_grille(
+    painter: &Painter,
+    art: &Art,
+    look: &Look,
+    grille: Rect,
+    model_name: &str,
+) {
+    let surface = art.surface(look.era);
+    painter.rect_filled(grille.expand(3.0), 6.0, Color32::from_rgb(7, 7, 7));
+    painter.rect_filled(grille.expand(1.5), 5.0, look.piping.gamma_multiply(0.55));
     tile(
         painter,
         grille,
         4.0,
-        &art.grille,
+        &surface.grille,
         art.ppp,
-        Color32::from_gray(205),
+        Color32::WHITE,
     );
+    painter.rect_stroke(grille.shrink(1.0), 3.0, stroke(1.0, look.piping));
 
     // The clipped painter keeps these soft shapes on the cloth.
     let cloth = painter.with_clip_rect(painter.clip_rect().intersect(grille));
@@ -63,9 +73,20 @@ pub(super) fn paint_grille(painter: &Painter, art: &Art, grille: Rect) {
         Color32::TRANSPARENT,
     );
 
+    // The classic script wordmark, in the era's metal.
+    spaced_italic(
+        &cloth,
+        grille.left_top() + Vec2::new(20.0, 16.0),
+        Align2::LEFT_TOP,
+        "Fender",
+        semibold(21.0),
+        look.piping,
+        0.4,
+    );
+
     // A small model plate, riveted to the cloth.
     let plate = Rect::from_min_max(
-        grille.right_bottom() + Vec2::new(-176.0, -40.0),
+        grille.right_bottom() + Vec2::new(-190.0, -48.0),
         grille.right_bottom() + Vec2::new(-16.0, -14.0),
     );
     cloth.rect_filled(
@@ -78,18 +99,27 @@ pub(super) fn paint_grille(painter: &Painter, art: &Art, grille: Rect) {
         &cloth,
         plate.shrink(1.0),
         2.5,
-        &art.panel,
+        &surface.panel,
         art.ppp,
         Color32::WHITE,
     );
     spaced(
         &cloth,
-        plate.center(),
-        Align2::CENTER_CENTER,
-        "SUPER CHAMP X2",
+        plate.center_top() + Vec2::new(0.0, 5.0),
+        Align2::CENTER_TOP,
+        &model_name.to_uppercase(),
         semibold(10.5),
-        SILK,
-        1.8,
+        Color32::from_rgb(28, 26, 24),
+        1.5,
+    );
+    spaced(
+        &cloth,
+        plate.center_bottom() + Vec2::new(0.0, -5.0),
+        Align2::CENTER_BOTTOM,
+        &look.tag().to_uppercase(),
+        regular(8.0),
+        Color32::from_rgb(72, 68, 62),
+        0.8,
     );
 }
 
@@ -157,6 +187,33 @@ pub(super) fn spaced(
             font_id: font,
             color,
             extra_letter_spacing: spacing,
+            ..Default::default()
+        },
+    );
+    let galley = painter.layout_job(job);
+    let rect = align.anchor_size(pos, galley.size());
+    painter.galley(rect.min, galley, color);
+}
+
+/// Letter-spaced italic, for the amplifier's script wordmark.
+pub(super) fn spaced_italic(
+    painter: &Painter,
+    pos: Pos2,
+    align: Align2,
+    text: &str,
+    font: FontId,
+    color: Color32,
+    spacing: f32,
+) {
+    let mut job = LayoutJob::default();
+    job.append(
+        text,
+        0.0,
+        TextFormat {
+            font_id: font,
+            color,
+            extra_letter_spacing: spacing,
+            italics: true,
             ..Default::default()
         },
     );

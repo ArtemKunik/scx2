@@ -19,10 +19,6 @@ pub const AMBER: Color32 = Color32::from_rgb(255, 178, 74);
 pub const AMBER_INK: Color32 = Color32::from_rgb(36, 22, 4);
 pub const ERROR: Color32 = Color32::from_rgb(240, 120, 104);
 
-/// Silk-screen ink on the black control panel.
-pub const SILK: Color32 = Color32::from_rgb(226, 222, 212);
-pub const SILK_DIM: Color32 = Color32::from_rgb(158, 154, 146);
-
 pub fn stroke(width: f32, color: Color32) -> Stroke {
     Stroke { width, color }
 }
