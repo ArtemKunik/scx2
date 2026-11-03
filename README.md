@@ -94,7 +94,7 @@ src/params.rs      direct-control frames, magic table, knob catalogue
 src/capture.rs     USBPcap (.pcap) reader for offline work
 src/models.rs      DSP model id -> name tables
 src/transport.rs   hidapi device discovery and I/O
-src/ui/            egui editor: app state, panels, widgets, faceplate
+src/ui/            egui editor: app state, amp view, procedural materials
 src/windows.rs     console detach and error dialog
 ```
 

@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
 
@@ -11,8 +12,9 @@ use eframe::CreationContext;
 use crate::capture;
 use crate::protocol::{self, Dump, BANK_AMP, BANK_FX, BANK_LIVE};
 
+use super::art::Art;
 use super::worker::{spawn_worker, Cmd, Ev};
-use super::{install_style, DEMO_CAPTURE};
+use super::{theme, DEMO_CAPTURE};
 // ---------------------------------------------------------------------------
 // app state
 // ---------------------------------------------------------------------------
@@ -40,6 +42,8 @@ pub struct App {
     pub(crate) flash: BTreeMap<usize, f32>,
     pub(crate) learn_log: Vec<String>,
     pub(crate) connecting: bool,
+    pub(crate) show_params: bool,
+    pub(crate) art: Option<Rc<Art>>,
 }
 
 impl App {
@@ -48,7 +52,7 @@ impl App {
         from: Option<PathBuf>,
         path: Option<String>,
     ) -> Self {
-        install_style(&cc.egui_ctx);
+        theme::install(&cc.egui_ctx);
 
         let mut app = App {
             dump: Dump::new(),
@@ -81,13 +85,15 @@ impl App {
             rx: None,
             connected: false,
             banner: None,
-            status: "offline".into(),
+            status: "Not connected".into(),
             error: None,
             polling: false,
             last_live: None,
             flash: BTreeMap::new(),
             learn_log: Vec::new(),
             connecting: false,
+            show_params: false,
+            art: None,
         };
 
         if let Some(file) = from {
@@ -104,8 +110,8 @@ impl App {
             Ok(reports) => {
                 self.dump = Dump::from_reports(reports);
                 self.original = self.dump.clone();
-                self.source = "bundled 2021 FUSE capture".into();
-                self.status = "demo capture loaded".into();
+                self.source = "Demo capture from 2021".into();
+                self.status = "Demo presets loaded".into();
                 self.pick_default_preset();
             }
             Err(error) => self.error = Some(format!("{error:#}")),
@@ -121,7 +127,7 @@ impl App {
                 self.dump = dump;
                 self.original = self.dump.clone();
                 self.source = path.display().to_string();
-                self.status = format!("loaded {}", path.display());
+                self.status = format!("Opened {}", path.display());
                 self.pick_default_preset();
             }
             Err(error) => self.error = Some(format!("{error:#}")),
@@ -148,7 +154,8 @@ impl App {
         self.tx = Some(cmd_tx);
         self.rx = Some(ev_rx);
         self.connecting = true;
-        self.status = "connecting...".into();
+        self.error = None;
+        self.status = "Connecting…".into();
     }
 
     pub(crate) fn pump(&mut self, ctx: &egui::Context) {
@@ -163,27 +170,27 @@ impl App {
                     self.connected = true;
                     self.connecting = false;
                     self.banner = banner;
-                    self.source = "SuperChamp X2  [1ed8:000e]".into();
-                    self.status = "connected".into();
+                    self.source = "Super Champ X2 (1ed8:000e)".into();
+                    self.status = "Connected".into();
                 }
                 Ev::Dump(dump) => {
                     self.handle_live_dump(dump);
                 }
                 Ev::Written(count) => {
                     self.original = self.dump.clone();
-                    self.status = format!("sent {count} report(s)");
+                    self.status = format!("Wrote {count} change(s) to the amp");
                 }
                 Ev::Error(message) => {
                     self.connected = false;
                     self.connecting = false;
-                    self.status = "offline".into();
+                    self.status = "Not connected".into();
                     self.error = Some(message);
                     self.rx = None;
                 }
             }
         }
         if self.connecting {
-            ctx.request_repaint_after(Duration::from_millis(150));
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
         if self.polling {
             ctx.request_repaint_after(Duration::from_millis(200));
@@ -232,14 +239,17 @@ impl App {
 
     pub(crate) fn toggle_poll(&mut self) {
         self.polling = !self.polling;
+        if self.polling {
+            self.show_params = true;
+        }
         if let Some(tx) = &self.tx {
             let _ = tx.send(Cmd::Poll(self.polling));
         }
         if self.polling {
             self.learn_log.clear();
-            self.status = "learning: turn one knob on the amp".into();
+            self.status = "Learning: turn one knob on the amp".into();
         } else {
-            self.status = "learning stopped".into();
+            self.status = "Learning stopped".into();
         }
     }
 

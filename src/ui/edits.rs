@@ -63,12 +63,11 @@ impl App {
         match &self.tx {
             Some(tx) if self.connected => {
                 let _ = tx.send(super::worker::Cmd::Write(frames.clone()));
-                self.status = format!("sending {} report(s)...", frames.len());
+                self.status = format!("Writing {} change(s)…", frames.len());
             }
             _ => {
-                self.error = Some(
-                    "no amp connected: the changes are kept locally, connect to send them".into(),
-                );
+                self.error =
+                    Some("No amp connected. Your changes are kept here until you connect.".into());
             }
         }
     }
@@ -83,7 +82,7 @@ impl App {
             .map_err(anyhow::Error::from)
             .and_then(|text| std::fs::write(&path, text).map_err(anyhow::Error::from))
         {
-            Ok(()) => self.status = format!("saved {}", path.display()),
+            Ok(()) => self.status = format!("Saved {}", path.display()),
             Err(error) => self.error = Some(format!("{error:#}")),
         }
     }
