@@ -64,6 +64,7 @@ impl App {
         ui.add_space(8.0);
         let editable = !self.connected || preset.bank == BANK_LIVE;
         let mut edits = Vec::new();
+        let mut flags = Vec::new();
         for (kind, title) in KINDS {
             let block = preset.block(kind);
             let model = block.and_then(|message| message.model()).unwrap_or(0);
@@ -71,9 +72,15 @@ impl App {
                 .map(|message| message.params().to_vec())
                 .unwrap_or_else(|| vec![0; 32]);
             let mut params = before.clone();
-            let reset = self.effect_card(ui, kind, title, model, &mut params, editable);
+            let mut bypass = block.is_some_and(|message| message.byte(22) != 0);
+            let was_bypassed = bypass;
+            let reset =
+                self.effect_card(ui, kind, title, model, &mut params, &mut bypass, editable);
             if !reset && params != before {
                 edits.push((kind, before, params));
+            }
+            if bypass != was_bypassed {
+                flags.push((kind, 22, u8::from(bypass)));
             }
         }
         ui.add_space(2.0);
@@ -89,6 +96,9 @@ impl App {
         for (kind, before, after) in edits {
             self.apply_effect(kind, &before, &after);
         }
+        for (kind, offset, value) in flags {
+            self.apply_edit(kind, offset, value);
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -99,6 +109,7 @@ impl App {
         title: &str,
         model: u16,
         params: &mut [u8],
+        bypass: &mut bool,
         editable: bool,
     ) -> bool {
         let loaded = model != 0;
@@ -131,6 +142,16 @@ impl App {
                         if loaded && editable && ui.small_button("Reset defaults").clicked() {
                             self.reset_effect(kind);
                             reset = true;
+                        }
+                        if loaded && editable {
+                            let toggle = ui
+                                .selectable_label(*bypass, "Bypass")
+                                .on_hover_text(
+                                    "FUSE stores bypass at offset 22 (0 = on, 1 = off). Not verified on SCX2 hardware.",
+                                );
+                            if toggle.clicked() {
+                                *bypass = !*bypass;
+                            }
                         }
                     });
                 });

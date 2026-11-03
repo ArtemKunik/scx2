@@ -78,9 +78,10 @@ loading a model gives it that model's default parameter bytes instead of
 inheriting the previous effect's settings.
 
 Open **Effect Parameters** for the complete editor: all 32 bytes of every
-effect block, with the FUSE name for the slots the model uses. The names and
-defaults are not yet verified on SCX2 hardware, so the panel says so; `scx2
-learn` is still the way to confirm them.
+effect block, with the FUSE name for the slots the model uses. Each loaded
+effect also has a **Bypass** toggle (offset 22, FUSE's `BypassState`). The
+names, defaults and bypass byte are not yet verified on SCX2 hardware, so the
+panel says so; `scx2 learn` is still the way to confirm them.
 
 The toolbar has **Open…**, **Save As…**, **Save Backup**, **Undo**, **Redo**
 and **Revert**, with Ctrl+O / Ctrl+S / Ctrl+Z / Ctrl+Shift+Z shortcuts. A `●`
