@@ -81,29 +81,20 @@ effects knobs: fx type, fx level, reverb
 Also useful: change a preset with the amp's own knob and watch the bank 0
 blocks change as the live buffer reloads.
 
-## 4. Check which write direction the amp accepts
+## 4. Write test (done, it works)
 
-`apply` changes exactly one byte of the live amp block and keeps everything
-else, so it is the smallest possible write:
+The amp needs the block frame **plus** the execute frame:
 
 ```console
-:: dry run against the backup, no device traffic
-scx2 apply amp --offset 35 --value 0x63 --from backup-before.json
-
-:: for real, against the live buffer
-scx2 apply amp --offset 35 --value 0x63 --yes
+scx2 apply amp --offset 44 --value 0x00
 ```
 
-Try it with `--dir c3` (default, the Mustang direct-control byte) and, if it
-does nothing, with `--dir echo` (the frame exactly as the amp sent it) and
-`--dir c1`.
+`apply` sends the modified block with direction byte `c3`, then `1c 03`.
+Re-run `scx2 dump` and the value is there; power-cycling the amp restores the
+stored preset, because this only writes the live buffer.
 
-Success = the amp's sound changes. Nothing is stored yet: power the amp off
-and on and the live buffer is back to the stored preset. To revert without a
-power cycle, `apply` the original value back (the dry run prints it).
-
-If a write makes the amp misbehave, power cycle it. Preset memory is only
-touched by the store path, which is not implemented yet.
+Confirmed on 2026-11-03: voice index 44 went `0x03` -> `0x00` -> `0x03` with
+matching dumps. `--no-execute` reproduces the earlier "amp ignores it" case.
 
 ## 5. Capture a FUSE edit + save (optional but very useful)
 

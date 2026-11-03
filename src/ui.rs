@@ -103,6 +103,8 @@ fn spawn_worker(path: Option<String>, tx: Sender<Ev>, rx: Receiver<Cmd>) {
                         if amp.write_report(&frame).is_err() {
                             break;
                         }
+                        // The amp buffers a block write until the execute frame.
+                        let _ = amp.write_report(&protocol::execute_model_change());
                         sent += 1;
                         thread::sleep(Duration::from_millis(25));
                     }

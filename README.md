@@ -6,10 +6,10 @@ Rust. No Silverlight, no dead installer, no 2013 runtime.
 Fender FUSE is gone and the amplifier still speaks a simple 64-byte HID
 protocol over USB. This project talks to it directly.
 
-> **Status: read path verified, write path built but not yet confirmed on
-> hardware.** The decoder is checked against a real FUSE session
-> (`captures/`, 198 reports, 34 presets, 13 tests). The write commands exist
-> and are dry-run by default; they need one confirmed test on the amp.
+> **Status: read and write verified on hardware** (Super Champ X2, firmware
+> `May 30 2013`). Dumping, polling and live parameter writes work; storing into
+> a preset slot is still unknown. Writes stay dry-run unless you pass `--yes`.
+> The decoder is also covered by tests against a real FUSE capture.
 > See [docs/test-plan.md](docs/test-plan.md).
 
 ## Commands
@@ -86,8 +86,8 @@ src/main.rs       CLI
 - [x] Preset/bank table, per-preset detail, byte-level diff
 - [x] Live polling mode for parameter mapping (`learn`)
 - [x] Raw frame send, single-byte apply, whole-backup restore (dry run first)
-- [ ] Confirm transport and write direction on hardware
-- [ ] Map the remaining parameter offsets
+- [x] Confirm transport and write direction on hardware (block + `1c 03`)
+- [ ] Map the remaining parameter offsets (`scx2 learn`)
 - [ ] Store/rename presets (needs the save frame)
 - [ ] Load/save Fender FUSE `.fuse` preset files
 - [ ] GUI

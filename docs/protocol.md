@@ -132,18 +132,42 @@ Stomp `0x0007` is the compressor, `0x002d` vibratone, `0x0012` sine chorus,
 `0x0041` sine tremolo, `0x002b` tape delay, `0x0016` mono delay, `0x0024`
 small hall, `0x003a` large hall, `0x003b` large room, `0x000b` spring '65.
 
+## Writing a block
+
+Verified on hardware (2026-11-03, firmware `May 30 2013`): the amp accepts a
+block it just reported if you send it back unchanged apart from the byte you
+want to change, **followed by the execute frame**.
+
+```text
+host -> 1c c3 05 00 00 00 01 00 ... <modified block>   (direction byte c3)
+host -> 1c 03 00 00 ...                                (execute)
+```
+
+Without the `1c 03` frame the amp reads the block and does nothing, which is
+why the first attempts looked like a silent ignore. Do not use `0x01` (the
+amp-to-host direction) or `0xc1` for a block write; only `0xc3` worked.
+
+Test that proved it: the live buffer held a `'65 Deluxe` (voice index `0x03` at
+offset 44). Sending offset 44 = `0x00` plus the execute frame, then re-dumping,
+reported `0x00`. Writing `0x03` back restored it.
+
+Side effect: after an execute frame the amp reports byte 7 as `0x01` on every
+amp block (it was `0x00` in the pre-write dump). It does not affect the data,
+but `scx2 diff` will show it after any write session.
+
+The UI and `scx2 apply` / `scx2 restore` send the execute frame automatically;
+`--no-execute` disables it for experiments.
+
 ## Still unknown
 
-The capture only covers start-up, so the write path is not yet proven:
-
-* **Applying a parameter change live.** The Mustang uses `05 c3 <param...>`
-  for a single-controller change; the SCX2 likely has a similar frame but the
-  parameter numbering has to be mapped by experiment.
 * **Storing a preset.** There must be a "write to slot" command; FUSE sends it
-  after you press save.
+  after you press save. Writing bank 0 only changes the live sound, and a
+  power cycle discards it.
 * **Meaning of the parameter bytes.** Offsets 32+ hold the amp parameters in
-  some order (gain, volume, treble, bass, ...). They can be mapped by moving
-  one knob at a time while watching `scx2 monitor`.
+  some order (gain, volume, treble, bass, ...). Map them by turning one knob at
+  a time while `scx2 learn` is running.
+* **Renaming a preset.** The name lives in the `0x04` block; whether writing it
+  back with the execute frame renames a stored slot is untested.
 * **The trailing notification reports**: `05 01 05 2b ...`, `05 01 06 24 ...`,
   `1d 01 01 ...`, `1d 01 02 07 ...` and `1f 01 00 24 ...`. They look like
   "current fx model" and "global state" announcements.

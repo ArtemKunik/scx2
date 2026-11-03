@@ -107,9 +107,9 @@ enum Command {
         /// Actually transmit
         #[arg(long)]
         yes: bool,
-        /// Follow with the Mustang model-change execute frame
+        /// Do not send the model-change execute frame (the amp needs it)
         #[arg(long)]
-        execute: bool,
+        no_execute: bool,
     },
     /// Change one byte of a block and send it back
     Apply {
@@ -139,9 +139,9 @@ enum Command {
         /// Actually transmit
         #[arg(long)]
         yes: bool,
-        /// Follow with the Mustang model-change execute frame
+        /// Do not send the model-change execute frame (the amp needs it)
         #[arg(long)]
-        execute: bool,
+        no_execute: bool,
     },
     /// Write a backup file back to the amp
     Restore {
@@ -156,9 +156,9 @@ enum Command {
         /// Actually transmit
         #[arg(long)]
         yes: bool,
-        /// Follow every block with the Mustang model-change execute frame
+        /// Do not send the model-change execute frame after every block
         #[arg(long)]
-        execute: bool,
+        no_execute: bool,
     },
     /// Open the desktop editor
     #[cfg(feature = "ui")]
@@ -199,8 +199,8 @@ fn run() -> Result<()> {
             hex,
             path,
             yes,
-            execute,
-        } => send(&hex, path.as_deref(), yes, execute),
+            no_execute,
+        } => send(&hex, path.as_deref(), yes, !no_execute),
         Command::Apply {
             kind,
             offset,
@@ -211,7 +211,7 @@ fn run() -> Result<()> {
             from,
             path,
             yes,
-            execute,
+            no_execute,
         } => apply(
             &kind,
             offset,
@@ -222,15 +222,15 @@ fn run() -> Result<()> {
             from.as_deref(),
             path.as_deref(),
             yes,
-            execute,
+            !no_execute,
         ),
         Command::Restore {
             file,
             path,
             bank,
             yes,
-            execute,
-        } => restore(&file, path.as_deref(), bank, yes, execute),
+            no_execute,
+        } => restore(&file, path.as_deref(), bank, yes, !no_execute),
         #[cfg(feature = "ui")]
         Command::Ui { from, path } => scx2::ui::run(from, path),
     }
