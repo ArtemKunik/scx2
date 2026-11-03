@@ -206,6 +206,37 @@ fn detach_console_if_owner() {
 #[cfg(not(windows))]
 fn detach_console_if_owner() {}
 
+#[cfg(windows)]
+#[link(name = "user32")]
+extern "system" {
+    fn MessageBoxW(
+        hwnd: *mut std::ffi::c_void,
+        text: *const u16,
+        caption: *const u16,
+        kind: u32,
+    ) -> i32;
+}
+
+/// GUI failures would otherwise vanish when the console is detached.
+fn report_ui_error(message: &str) {
+    #[cfg(windows)]
+    {
+        let text: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
+        let caption: Vec<u16> = "Super Champ X2"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        // SAFETY: both pointers reference null-terminated buffers alive here.
+        unsafe {
+            MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), 0x10);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = message;
+    }
+}
+
 fn run() -> Result<()> {
     let cli = Cli::parse();
     let command = match cli.command {
@@ -279,7 +310,13 @@ fn run() -> Result<()> {
             no_execute,
         } => restore(&file, path.as_deref(), bank, yes, !no_execute),
         #[cfg(feature = "ui")]
-        Command::Ui { from, path } => scx2::ui::run(from, path),
+        Command::Ui { from, path } => {
+            if let Err(error) = scx2::ui::run(from, path) {
+                report_ui_error(&format!("{error:#}"));
+                return Err(error);
+            }
+            Ok(())
+        }
     }
 }
 
