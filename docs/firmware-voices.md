@@ -86,13 +86,15 @@ What is realistic:
    block and see whether the amp accepts it or falls back. If the DSP shares
    programs with the Mustang, this is how you would find out. The firmware
    table suggests it will be rejected, but it is cheap to test and reversible
-   (live buffer only, restored by recalling a preset).
+   (live buffer only, restored by recalling a preset). Not attempted yet: the
+   test is audible, so it needs the amp powered up with someone listening.
 3. **A genuinely new amp model** - needs the DSP layer, not this update:
    either replacing a fixed DSP program or writing new code for it, then
    patching this voice table and reflashing. The update header is only an MD5
    (`md5(bytes[16:]) == bytes[0..16]`), so the updater accepts modified images;
    the risk is the bootloader, which is not in the package, and a bad image
-   can leave the amp needing boot-mode recovery.
+   can leave the amp needing boot-mode recovery. Nothing has been modified or
+   flashed.
 
 ## Why the model code is elsewhere
 
