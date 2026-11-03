@@ -1,0 +1,112 @@
+# scx2
+
+An open-source preset librarian for the **Fender Super Champ X2**, written in
+Rust. No Silverlight, no dead installer, no 2013 runtime.
+
+Fender FUSE is gone and the amplifier still speaks a simple 64-byte HID
+protocol over USB. This project talks to it directly.
+
+> **Status: read path verified, write path built but not yet confirmed on
+> hardware.** The decoder is checked against a real FUSE session
+> (`captures/`, 198 reports, 34 presets, 13 tests). The write commands exist
+> and are dry-run by default; they need one confirmed test on the amp.
+> See [docs/test-plan.md](docs/test-plan.md).
+
+## Commands
+
+```console
+scx2 scan                       # list Fender HID devices
+scx2 dump -o backup.json        # read all presets into a JSON backup
+scx2 show backup.json           # print a backup
+scx2 show backup.json --preset 1:7 --raw
+scx2 diff a.json b.json         # byte-level comparison of two backups
+scx2 learn                      # watch the live buffer, map knobs to offsets
+scx2 monitor                    # print every report the amp sends
+scx2 replay capture.pcap        # decode a USBPcap recording, no amp needed
+
+# writes (dry run unless --yes)
+scx2 apply amp --offset 35 --value 0x63 --from backup.json
+scx2 send --hex "1c c1 05 00 00 00 01 01"
+scx2 restore backup.json
+```
+
+`dump` and `replay` both print the full preset memory:
+
+```text
+34 preset(s)
+bank  idx  name                       amp               stomp             mod             delay         reverb
+--------------------------------------------------------------------------------------------------------------
+live    0                             Clean Channel     None              None            Tape Delay    Small Hall
+amp     0  voice                      '57 Champ         None              -               -             -
+amp     1  Tweed Deluxe Clean         '57 Deluxe        None              -               -             -
+amp     2  Tweed Deluxe Dirty         '57 Deluxe        Compressor        -               -             -
+...
+fx      6  Fender Spring Reverb       -                 -                 None            None          Spring '65
+fx     11  Chorus + Reverb            -                 -                 Sine Chorus     None          Small Hall
+```
+
+Backups are lossless: every block keeps its raw 64-byte report, so a restore
+is byte-for-byte and future versions can decode more from the same file.
+
+## Build
+
+Rust 1.75 or newer.
+
+```console
+cargo build --release
+cargo test
+target\release\scx2.exe scan
+```
+
+No amp is needed for `replay`; the bundled capture is a complete dump recorded
+from FUSE in 2021.
+
+## How it works
+
+The amp is a composite HID device (`1ED8:000E`) with a vendor-defined HID
+interface carrying 64-byte reports. The frame layout, the handshake, the three
+banks and the model id tables are documented in
+[docs/protocol.md](docs/protocol.md); the known parameters in
+[docs/parameters.md](docs/parameters.md).
+
+```
+src/protocol.rs   frames, message decoding, dump/preset model, diff, JSON
+src/capture.rs    USBPcap (.pcap) reader for offline work
+src/models.rs     DSP model id -> name tables
+src/transport.rs  hidapi device discovery and I/O
+src/main.rs       CLI
+```
+
+## Roadmap
+
+- [x] Enumerate the amp and read its identity
+- [x] Handshake, request and decode a full dump
+- [x] Offline verification against a real capture
+- [x] Lossless JSON backup and reload
+- [x] Preset/bank table, per-preset detail, byte-level diff
+- [x] Live polling mode for parameter mapping (`learn`)
+- [x] Raw frame send, single-byte apply, whole-backup restore (dry run first)
+- [ ] Confirm transport and write direction on hardware
+- [ ] Map the remaining parameter offsets
+- [ ] Store/rename presets (needs the save frame)
+- [ ] Load/save Fender FUSE `.fuse` preset files
+- [ ] GUI
+
+## Safety
+
+Every write command prints the exact frame it would send and stops unless
+`--yes` is given. `restore` additionally requires a full backup first (make
+one with `dump`). Only the live buffer is ever written until the store path is
+verified; a power cycle discards it.
+
+## Credits
+
+* The protocol capture comes from `rmduddy`, published on
+  [snhirsch/mustang-midi-bridge issue #6](https://github.com/snhirsch/mustang-midi-bridge/issues/6).
+* Model id tables and the Mustang framing reference:
+  [snhirsch/mustang-midi-bridge](https://github.com/snhirsch/mustang-midi-bridge) (GPL-3.0),
+  `docs/reference/` keeps the relevant source files for reference.
+* Fender FUSE on modern Windows:
+  [the wiki page](https://fender-mustang-amps-and-fuse.fandom.com/wiki/Fender_Fuse_on_Windows_11).
+
+Unofficial project, not affiliated with Fender. Use it on hardware you own.
