@@ -93,6 +93,18 @@ impl Dump {
         Ok(dump)
     }
 
+    /// A dump holding a single preset, for files that carry one preset (`.fuse`).
+    pub fn single(preset: Preset) -> Self {
+        let mut dump = Dump::new();
+        dump.presets.insert((preset.bank, preset.index), preset);
+        dump
+    }
+
+    /// Add or replace a preset.
+    pub fn insert(&mut self, preset: Preset) {
+        self.presets.insert((preset.bank, preset.index), preset);
+    }
+
     pub fn presets(&self) -> impl Iterator<Item = &Preset> {
         self.presets.values()
     }

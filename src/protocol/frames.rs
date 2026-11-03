@@ -30,12 +30,47 @@ pub fn request_dump() -> [u8; REPORT_SIZE] {
 /// Recall a stored preset. Mirrors the Mustang patch-change frame; not yet
 /// verified on SCX2 hardware, kept for the probe tools.
 pub fn patch_change(slot: u8) -> [u8; REPORT_SIZE] {
+    recall_preset(0, slot)
+}
+
+/// Recall a preset from a specific bank. Still the Mustang frame shape; the
+/// SCX2 has not been shown to accept it.
+pub fn recall_preset(bank: u8, slot: u8) -> [u8; REPORT_SIZE] {
     let mut buf = [0u8; REPORT_SIZE];
     buf[0] = FRAME_MARKER;
     buf[1] = AMP_TO_HOST;
     buf[2] = 0x01;
+    buf[3] = bank;
     buf[4] = slot;
     buf[6] = 0x01;
+    buf
+}
+
+/// Build a `0x04` name block. The caller sends it with the host direction and
+/// the execute frame. Whether a stored slot actually accepts it is untested.
+pub fn name_change(bank: u8, index: u8, name: &str) -> [u8; REPORT_SIZE] {
+    let mut buf = [0u8; REPORT_SIZE];
+    buf[0] = FRAME_MARKER;
+    buf[1] = AMP_TO_HOST;
+    buf[2] = super::Kind::Name.code();
+    buf[3] = bank;
+    buf[4] = index;
+    buf[6] = 0x01;
+    for (index, byte) in name.as_bytes().iter().take(NAME_LEN).enumerate() {
+        buf[OFF_NAME + index] = *byte;
+    }
+    buf
+}
+
+/// Point an existing block at another bank/index, keeping its payload.
+///
+/// This is the building block for the experimental `store` command: the amp
+/// already accepts a block write, so the only open question is whether writing
+/// every block with the target coordinates is enough to persist a preset.
+pub fn retarget(raw: &[u8; REPORT_SIZE], bank: u8, index: u8) -> [u8; REPORT_SIZE] {
+    let mut buf = *raw;
+    buf[3] = bank;
+    buf[4] = index;
     buf
 }
 

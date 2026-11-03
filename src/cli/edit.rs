@@ -142,6 +142,114 @@ pub(crate) fn apply(
     Ok(())
 }
 
+/// Recall a stored preset.
+///
+/// The frame is the Mustang patch-change shape. It is deliberately marked
+/// experimental: the SCX2 has not confirmed it, and the bank pairing is
+/// unknown. The command still refuses to send without `--yes`.
+pub(crate) fn recall(bank: u8, slot: u8, path: Option<&str>, yes: bool) -> Result<()> {
+    let frame = protocol::recall_preset(bank, slot);
+    println!("recall bank {bank} slot {slot} (experimental, unverified on SCX2)");
+    println!("frame: {}", protocol::hex(&frame));
+    if !yes {
+        println!("dry run, add --yes to transmit");
+        return Ok(());
+    }
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    amp.write_report(&frame)?;
+    println!("sent");
+    Ok(())
+}
+
+/// Rename a stored preset by writing its `0x04` name block.
+///
+/// Writing the name block is not confirmed to persist a stored slot; the
+/// command prints the exact frame and only sends with `--yes`.
+pub(crate) fn rename(name: &str, bank: u8, index: u8, path: Option<&str>, yes: bool) -> Result<()> {
+    let raw = protocol::name_change(bank, index, name);
+    let frame = protocol::as_host_frame(&raw, protocol::HOST_CONTROL);
+    println!(
+        "rename bank {bank} index {index} to {:?} (experimental, unverified on SCX2)",
+        name.chars().take(protocol::NAME_LEN).collect::<String>()
+    );
+    println!("frame: {}", protocol::hex(&frame));
+    if !yes {
+        println!("dry run, add --yes to transmit");
+        return Ok(());
+    }
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    amp.write_report(&frame)?;
+    amp.write_report(&protocol::execute_model_change())?;
+    println!("sent name block + execute frame");
+    Ok(())
+}
+
+/// Store the live buffer into a preset slot.
+///
+/// The real save frame is still unknown. This is the best available
+/// experiment: every live block is re-addressed to the target bank/index and
+/// written with the execute frame the amp already accepts. It prints exactly
+/// what it will send and requires `--yes`.
+pub(crate) fn store(
+    bank: u8,
+    index: u8,
+    name: Option<&str>,
+    path: Option<&str>,
+    yes: bool,
+) -> Result<()> {
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    let dump = amp.read_dump()?;
+    let live = dump
+        .live()
+        .context("the dump did not contain a live buffer")?;
+
+    let mut frames: Vec<(String, [u8; protocol::REPORT_SIZE])> = Vec::new();
+    for message in live.messages() {
+        let raw = protocol::retarget(message.as_bytes(), bank, index);
+        frames.push((
+            message.summary(),
+            protocol::as_host_frame(&raw, protocol::HOST_CONTROL),
+        ));
+    }
+    if let Some(name) = name {
+        let raw = protocol::name_change(bank, index, name);
+        frames.push((
+            format!("name={name:?}"),
+            protocol::as_host_frame(&raw, protocol::HOST_CONTROL),
+        ));
+    }
+
+    println!(
+        "store live buffer into bank {bank} index {index}: {} block(s)",
+        frames.len()
+    );
+    println!(
+        "EXPERIMENTAL: the SCX2 save frame is unknown. This writes each block with the target bank/index and the execute frame. Verify with `scx2 dump` afterwards."
+    );
+    for (summary, frame) in &frames {
+        println!("  {summary}  {}", protocol::hex(frame));
+    }
+    if !yes {
+        println!("dry run, add --yes to transmit");
+        return Ok(());
+    }
+    for (summary, frame) in &frames {
+        println!("sending {summary}");
+        amp.write_report(frame)?;
+        sleep(Duration::from_millis(20));
+        amp.write_report(&protocol::execute_model_change())?;
+        sleep(Duration::from_millis(20));
+    }
+    println!("done: {} block(s) sent", frames.len());
+    Ok(())
+}
+
 pub(crate) fn restore(
     file: &Path,
     path: Option<&str>,

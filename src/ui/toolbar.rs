@@ -13,7 +13,6 @@ use crate::protocol::{BANK_AMP, BANK_FX, BANK_LIVE};
 pub(super) enum ButtonKind {
     Plain,
     Primary,
-    Active,
 }
 
 pub(super) fn tool_button(
@@ -46,7 +45,6 @@ pub(super) fn tool_button(
             },
             AMBER_INK,
         ),
-        (ButtonKind::Active, _) => (AMBER.gamma_multiply(0.22), AMBER),
         (_, false) => (Color32::from_white_alpha(6), TEXT_3),
         (_, true) => (
             Color32::from_white_alpha(if pressed {
@@ -69,19 +67,29 @@ impl App {
     pub(super) fn toolbar(&mut self, ui: &mut Ui) {
         let key = self.selected;
         let preset = self.dump.get(key.0, key.1);
-        let title = match preset {
+        let mut title = match preset {
             Some(_) if key.0 == BANK_LIVE => "Live Buffer".to_string(),
             Some(preset) if !preset.name.is_empty() => preset.name.clone(),
             Some(preset) => format!("Preset {}", preset.index),
             None => "No preset selected".to_string(),
         };
+        let dirty = self.dirty();
+        if dirty {
+            title.insert_str(0, "● ");
+        }
         let saved = if self.connected {
             ". Stored on the amp, read-only here"
         } else {
             ""
         };
         let place = match key.0 {
-            BANK_LIVE => "What the amp is playing now".to_string(),
+            BANK_LIVE => {
+                if dirty {
+                    "What the amp is playing now · unsaved edits".to_string()
+                } else {
+                    "What the amp is playing now".to_string()
+                }
+            }
             BANK_AMP => format!("Amp preset {}{saved}", key.1),
             BANK_FX => format!("FX preset {}{saved}", key.1),
             _ => String::new(),
@@ -95,14 +103,27 @@ impl App {
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                if tool_button(ui, "Save As…", true, ButtonKind::Primary).clicked() {
+                    self.save_dialog();
+                }
+                if tool_button(ui, "Open…", true, ButtonKind::Plain).clicked() {
+                    self.open_dialog();
+                }
                 if tool_button(ui, "Save Backup", true, ButtonKind::Plain).clicked() {
                     self.save_backup();
+                }
+                if tool_button(ui, "Undo", !self.history.is_empty(), ButtonKind::Plain).clicked() {
+                    self.undo();
+                }
+                if tool_button(ui, "Redo", !self.future.is_empty(), ButtonKind::Plain).clicked() {
+                    self.redo();
                 }
                 // Without an amp, edits are made to a backup and can be undone.
                 if !self.connected
                     && !self.pending().is_empty()
                     && tool_button(ui, "Revert", true, ButtonKind::Plain).clicked()
                 {
+                    self.begin_edit();
                     self.dump = self.original.clone();
                     self.status = "Changes reverted".into();
                 }
@@ -119,7 +140,7 @@ impl App {
             painter.text(
                 Pos2::new(rect.right(), y),
                 Align2::RIGHT_CENTER,
-                "Drop a backup anywhere to open it",
+                "Drop a backup or .fuse preset anywhere to open it",
                 regular(11.5),
                 TEXT_3,
             );

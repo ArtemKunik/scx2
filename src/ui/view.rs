@@ -77,7 +77,7 @@ fn drop_overlay(ctx: &egui::Context) {
     painter.text(
         screen.center(),
         Align2::CENTER_CENTER,
-        "Drop to open this backup",
+        "Drop to open a backup or .fuse preset",
         semibold(22.0),
         TEXT,
     );
@@ -104,7 +104,7 @@ impl App {
         // The grille takes the room that is left, and yields when the
         // parameters open. Cloth is the one thing here that can give way.
         let fixed = panel_h + 2.0 * CABINET_PAD + 14.0 + 18.0 + PEDAL_H + 14.0 + 28.0 + 8.0;
-        let target = if self.show_params {
+        let target = if self.show_params || self.show_fx_params {
             GRILLE_MIN
         } else {
             (viewport - fixed).clamp(GRILLE_MIN, GRILLE_MAX)
@@ -127,6 +127,8 @@ impl App {
                         ui.add_space(18.0);
                         self.pedals(ui, art, &preset, width);
                         ui.add_space(14.0);
+                        self.effect_parameters(ui, &preset, width);
+                        ui.add_space(8.0);
                         self.parameters(ui, &preset, width);
                     });
                 });

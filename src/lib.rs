@@ -1,4 +1,5 @@
 pub mod capture;
+pub mod fuse;
 pub mod models;
 pub mod params;
 pub mod protocol;

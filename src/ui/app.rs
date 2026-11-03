@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 use eframe::CreationContext;
@@ -47,7 +47,15 @@ pub struct App {
     ctx: egui::Context,
     pub(crate) connecting: bool,
     pub(crate) show_params: bool,
+    pub(crate) show_fx_params: bool,
     pub(crate) art: Option<Rc<Art>>,
+    /// Undo/redo snapshots of the whole dump.
+    pub(crate) history: Vec<Dump>,
+    pub(crate) future: Vec<Dump>,
+    /// Consecutive edits inside this window become one undo step.
+    pub(crate) last_edit: Option<Instant>,
+    /// The file last opened or saved, if any.
+    pub(crate) path: Option<PathBuf>,
 }
 
 impl App {
@@ -102,7 +110,12 @@ impl App {
             ctx: cc.egui_ctx.clone(),
             connecting: false,
             show_params: false,
+            show_fx_params: false,
             art: None,
+            history: Vec::new(),
+            future: Vec::new(),
+            last_edit: None,
+            path: None,
         };
 
         if let Some(file) = from {
@@ -121,23 +134,46 @@ impl App {
                 self.original = self.dump.clone();
                 self.source = "Demo capture from 2021".into();
                 self.status = "Demo presets loaded".into();
+                self.path = None;
+                self.history.clear();
+                self.future.clear();
+                self.last_edit = None;
                 self.pick_default_preset();
             }
             Err(error) => self.error = Some(format!("{error:#}")),
         }
     }
 
+    /// Open a JSON backup or a single-preset FUSE `.fuse` file.
     pub(crate) fn load_file(&mut self, path: &Path) {
-        match std::fs::read_to_string(path)
+        let is_fuse = path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("fuse"));
+        let parsed = std::fs::read_to_string(path)
             .map_err(anyhow::Error::from)
-            .and_then(|text| Dump::from_json(&text).map_err(anyhow::Error::from))
-        {
+            .and_then(|text| {
+                if is_fuse {
+                    crate::fuse::parse(&text).map(Dump::single)
+                } else {
+                    Dump::from_json(&text).map_err(anyhow::Error::from)
+                }
+            });
+        match parsed {
             Ok(dump) => {
                 self.dump = dump;
                 self.original = self.dump.clone();
                 self.source = path.display().to_string();
+                self.path = Some(path.to_path_buf());
+                self.history.clear();
+                self.future.clear();
+                self.last_edit = None;
                 self.status = format!("Opened {}", path.display());
                 self.pick_default_preset();
+                if is_fuse && self.connected {
+                    self.send_live_preset();
+                    self.status =
+                        format!("Opened {} and sent it to the live buffer", path.display());
+                }
             }
             Err(error) => self.error = Some(format!("{error:#}")),
         }

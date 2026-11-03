@@ -69,17 +69,57 @@ fn the_handshake_is_not_an_acknowledgement() {
 }
 
 #[test]
-fn selector_and_effect_reports_ask_for_a_new_read() {
-    // Seen at the end of every dump: selector knob positions and an effect value.
-    for head in [
-        &[0x1d, 0x01, 0x01, 0x06][..],
-        &[0x1d, 0x01, 0x02, 0x05][..],
-        &[
-            0x05, 0x01, 0x06, 0x3a, 0x00, 0x00, 0x00, 0x01, 0x00, 0x1d, 0x1d,
-        ][..],
-    ] {
-        assert_eq!(classify(&report(head)), Some(Notice::StateChanged));
-    }
+fn selector_knob_positions_are_decoded() {
+    assert_eq!(
+        classify(&report(&[0x1d, 0x01, 0x01, 0x06])),
+        Some(Notice::KnobPosition {
+            index: 1,
+            position: 6,
+        })
+    );
+    assert_eq!(
+        classify(&report(&[0x1d, 0x01, 0x02, 0x05])),
+        Some(Notice::KnobPosition {
+            index: 2,
+            position: 5,
+        })
+    );
+}
+
+#[test]
+fn trailing_effect_reports_carry_a_parameter_value() {
+    // From the bundled capture: delay model 0x002b, parameter 0 = 0x39.
+    assert_eq!(
+        classify(&report(&[
+            0x05, 0x01, 0x05, 0x2b, 0x00, 0x00, 0x00, 0x01, 0x00, 0x39, 0x39,
+        ])),
+        Some(Notice::EffectParam {
+            module: 5,
+            model: 0x002b,
+            index: 0,
+            value: 0x39,
+        })
+    );
+    // Reverb model 0x0024, parameter 0 = 0x34.
+    assert_eq!(
+        classify(&report(&[
+            0x05, 0x01, 0x06, 0x24, 0x00, 0x00, 0x00, 0x01, 0x00, 0x34, 0x34,
+        ])),
+        Some(Notice::EffectParam {
+            module: 6,
+            model: 0x0024,
+            index: 0,
+            value: 0x34,
+        })
+    );
+}
+
+#[test]
+fn the_pre_dump_summary_is_recognised() {
+    assert_eq!(
+        classify(&report(&[0x1f, 0x01, 0x00, 0x24, 0x00, 0x00, 0x00, 0x01])),
+        Some(Notice::Summary)
+    );
 }
 
 #[test]

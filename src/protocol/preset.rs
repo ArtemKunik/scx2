@@ -76,8 +76,8 @@ impl Preset {
     /// Load a DSP model into a block, or clear it with model id `0`.
     ///
     /// Returns false for kinds that do not carry a model. Existing parameters
-    /// are kept; the amp restores a new model's own defaults when it recalls a
-    /// stored preset, and the live buffer simply keeps the bytes the user sees.
+    /// are kept; use [`Preset::load_model`] when changing from one effect to
+    /// another, so the new model does not inherit the old one's settings.
     pub fn set_model(&mut self, kind: Kind, model: u16) -> bool {
         let Some(block) = self.ensure_block(kind) else {
             return false;
@@ -86,6 +86,70 @@ impl Preset {
         block.set_byte(OFF_MODEL, low);
         block.set_byte(OFF_MODEL + 1, high);
         true
+    }
+
+    /// Load a model and give it its own parameter defaults.
+    ///
+    /// FUSE knows the factory defaults for many effects; for the rest this uses
+    /// a neutral `0x80` in every used slot. Clearing (`model == 0`) zeroes the
+    /// parameter bytes. Amp models also move the voice bytes at 44..46.
+    pub fn load_model(&mut self, kind: Kind, model: u16) -> bool {
+        let Some(block) = self.ensure_block(kind) else {
+            return false;
+        };
+        let [low, high] = model.to_le_bytes();
+        block.set_byte(OFF_MODEL, low);
+        block.set_byte(OFF_MODEL + 1, high);
+
+        if model == 0 {
+            for offset in OFF_PARAMS..REPORT_SIZE {
+                block.set_byte(offset, 0);
+            }
+            return true;
+        }
+
+        if kind == Kind::Amp {
+            if let Some(voice) = crate::models::voice_index(model) {
+                for offset in 44..=46 {
+                    block.set_byte(offset, voice);
+                }
+            }
+            return true;
+        }
+
+        if let Some(defaults) = crate::models::default_params(kind, model) {
+            for (index, value) in defaults.iter().enumerate() {
+                block.set_byte(OFF_PARAMS + index, *value);
+            }
+        }
+        true
+    }
+
+    /// Set the preset name, updating (or creating) the `0x04` name block.
+    ///
+    /// Names are 32 bytes, NUL padded. The block keeps the preset's bank and
+    /// index so it can be sent back to the same slot.
+    pub fn set_name(&mut self, name: &str) {
+        self.name = name.chars().take(NAME_LEN).collect();
+        let bytes = self.name.as_bytes();
+
+        if self.name_message.is_none() {
+            let mut raw = [0u8; REPORT_SIZE];
+            raw[0] = FRAME_MARKER;
+            raw[1] = AMP_TO_HOST;
+            raw[2] = Kind::Name.code();
+            raw[3] = self.bank;
+            raw[4] = self.index;
+            raw[6] = 0x01;
+            if let Some(message) = Message::from_bytes(raw) {
+                self.name_message = Some(message);
+            }
+        }
+        if let Some(message) = self.name_message.as_mut() {
+            for (index, slot) in (OFF_NAME..OFF_NAME + NAME_LEN).enumerate() {
+                message.set_byte(slot, bytes.get(index).copied().unwrap_or(0));
+            }
+        }
     }
 
     pub fn name_message(&self) -> Option<&Message> {

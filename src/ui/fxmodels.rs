@@ -19,6 +19,7 @@ const TAPE: &[&str] = &["TIME", "REPEATS", "MIX"];
 const CHROME: Color32 = Color32::from_rgb(176, 178, 180);
 const BLACK_KNOB: Color32 = Color32::from_rgb(28, 28, 30);
 const WHITE_INK: Color32 = Color32::from_rgb(238, 236, 230);
+#[allow(clippy::too_many_arguments)]
 fn pedal(
     form: Form,
     body: Color32,
@@ -242,7 +243,7 @@ fn rack(name: &'static str, led: Color32) -> Pedal {
 /// The hardware for a loaded model, if the id is known.
 pub(super) fn look(kind: Kind, model: u16) -> Option<Pedal> {
     let fallback = models::model_name(kind, model).unwrap_or("EFFECT");
-    Some(match (kind, model) {
+    let mut pedal = match (kind, model) {
         (Kind::Stomp, 0x003c) => colored([92, 78, 26], "OVERDRIVE", "DRIVE", 3, DRIVE),
         (Kind::Stomp, 0x0049 | 0x004a | 0x001c) => wah("WAH"),
         (Kind::Stomp, 0x001a) => colored([138, 30, 26], "FUZZ", "FUZZ", 2, COMP),
@@ -295,5 +296,17 @@ pub(super) fn look(kind: Kind, model: u16) -> Option<Pedal> {
         (Kind::Reverb, 0x0021 | 0x000b) => tank(fallback),
         (Kind::Reverb, _) => rack(fallback, Color32::from_rgb(90, 190, 255)),
         _ => return None,
-    })
+    };
+
+    // The artwork decides the enclosure; FUSE's model table decides what the
+    // knobs actually control. A treadle has no knobs of its own, so its
+    // parameters live in the effect panel instead.
+    if pedal.form != Form::Wah {
+        let labels = models::effect_params(kind, model);
+        if !labels.is_empty() {
+            pedal.labels = labels;
+            pedal.knobs = models::effect_knobs(kind, model);
+        }
+    }
+    Some(pedal)
 }

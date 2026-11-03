@@ -71,44 +71,36 @@ impl Pedal {
     /// The paint code and the hit testing both use this, so a knob cannot drift
     /// away from the circle a person is actually grabbing.
     pub fn controls(&self, unit: Rect) -> Vec<Control> {
+        // FUSE gives every effect six parameter slots. Some models use all six,
+        // so the knob row has to shrink rather than overlap when it is full.
+        let radius = if self.knobs > 4 { 6.5 } else { 11.0 };
         match self.form {
-            Form::Box => row(unit, unit.top() + unit.height() * 0.33, 11.0, self.knobs),
+            Form::Box => row(unit, unit.top() + unit.height() * 0.33, radius, self.knobs),
             Form::Wah => Vec::new(),
-            Form::Tape => row(unit, unit.bottom() - 34.0, 8.0, self.knobs),
+            Form::Tape => {
+                let radius = if self.knobs > 4 { 6.0 } else { 8.0 };
+                row(unit, unit.bottom() - 34.0, radius, self.knobs)
+            }
             Form::Tank => {
                 let plate = Rect::from_min_max(
                     unit.left_bottom() + Vec2::new(8.0, -52.0),
                     unit.right_bottom() + Vec2::new(-8.0, -8.0),
                 );
-                [0.56, 0.72, 0.88]
-                    .into_iter()
-                    .take(self.knobs)
-                    .map(|t| Control {
-                        center: Pos2::new(plate.left() + plate.width() * t, plate.center().y + 2.0),
-                        radius: 8.5,
-                    })
-                    .collect()
+                row(plate, plate.center().y + 2.0, 6.5, self.knobs)
             }
             Form::Rack => {
                 let face = Rect::from_min_max(
                     unit.left_top() + Vec2::new(10.0, 5.0),
                     unit.right_bottom() + Vec2::new(-10.0, -6.0),
                 );
-                [0.64, 0.82]
-                    .into_iter()
-                    .take(self.knobs)
-                    .map(|t| Control {
-                        center: Pos2::new(face.left() + face.width() * t, face.center().y + 10.0),
-                        radius: 8.0,
-                    })
-                    .collect()
+                row(face, face.center().y + 10.0, 7.0, self.knobs)
             }
         }
     }
 }
 
 fn row(unit: Rect, y: f32, radius: f32, count: usize) -> Vec<Control> {
-    let span = unit.width() * 0.66;
+    let span = unit.width() * 0.72;
     (0..count)
         .map(|index| {
             let t = if count == 1 {

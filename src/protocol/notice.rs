@@ -17,6 +17,19 @@ const SELECTOR_AMP: u8 = 0x0C;
 pub enum Notice {
     /// An amp parameter moved. `index` uses direct-control numbering.
     AmpParam { model: u16, index: u8, value: u8 },
+    /// An effect parameter moved. `module` is the amp's effect-module byte
+    /// (5 and 6 were observed for delay and reverb), `model` is the DSP model,
+    /// and `index` is the parameter slot at block offset `32 + index`.
+    EffectParam {
+        module: u8,
+        model: u16,
+        index: u8,
+        value: u8,
+    },
+    /// A selector knob position, sent at the end of a dump.
+    KnobPosition { index: u8, position: u8 },
+    /// The `1f 01` state summary sent before a dump.
+    Summary,
     /// Answer to a direct-control write; status 0 means accepted.
     Ack { status: u8 },
     /// Something else changed (voice, effects). The amp does not say what, so
@@ -28,19 +41,35 @@ pub enum Notice {
 pub fn classify(report: &[u8; REPORT_SIZE]) -> Option<Notice> {
     match (report[0], report[1]) {
         (0x05, 0x01) => {
-            let param = report[2] == 0x02 && report[5] == report[6] && report[7] == SELECTOR_AMP;
-            Some(if param {
-                Notice::AmpParam {
-                    model: u16::from_le_bytes([report[3], report[4]]),
+            let repeated = report[5] == report[6];
+            let model = u16::from_le_bytes([report[3], report[4]]);
+            let value = byte_from_wire(u16::from_le_bytes([report[9], report[10]]));
+            if report[2] == 0x02 && repeated && report[7] == SELECTOR_AMP {
+                Some(Notice::AmpParam {
+                    model,
                     index: report[5],
-                    value: byte_from_wire(u16::from_le_bytes([report[9], report[10]])),
-                }
+                    value,
+                })
+            } else if repeated && report[7] == 0x01 {
+                // Seen at the end of every dump: one report per effect module,
+                // carrying the same 16-bit value shape as direct control.
+                Some(Notice::EffectParam {
+                    module: report[2],
+                    model,
+                    index: report[5],
+                    value,
+                })
             } else {
-                Notice::StateChanged
-            })
+                Some(Notice::StateChanged)
+            }
         }
+        (0x1d, 0x01) => Some(Notice::KnobPosition {
+            index: report[2],
+            position: report[3],
+        }),
+        (0x1f, 0x01) => Some(Notice::Summary),
         (0x00, _) if report[2] == 0x05 => Some(Notice::Ack { status: report[3] }),
-        (0x13 | 0x19 | 0x1B | 0x1D | 0x20, 0x01) => Some(Notice::StateChanged),
+        (0x13 | 0x19 | 0x1B | 0x20, 0x01) => Some(Notice::StateChanged),
         _ => None,
     }
 }

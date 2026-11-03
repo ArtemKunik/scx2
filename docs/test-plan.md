@@ -122,6 +122,35 @@ Restore is the same mechanism as `apply`, just for every block. Do not run it
 with `--yes` until `apply` has been confirmed, otherwise you will be writing
 172 unverified frames into preset memory.
 
+## 7. Verify the new effect map and the experimental save path
+
+The effect parameter names/defaults now come from FUSE's model table. They are
+consistent with the capture but not yet proven on the SCX2:
+
+1. Load a known effect (for example Overdrive) into the live buffer.
+2. Open **Effect Parameters** and compare the labels with FUSE's editor.
+3. Turn one knob at a time and run `scx2 learn`; record which offset moves.
+4. Repeat for a delay (Time, Fdbk, Flutter) and a reverb (Level, Decay, Dwell).
+
+The store/recall/rename commands are deliberately experimental. Test them only
+after `dump` and `apply` work, and keep a backup:
+
+```console
+scx2 dump -o before-store.json
+scx2 store --bank 1 --index 7 --name "Store test"          # prints every frame
+scx2 store --bank 1 --index 7 --name "Store test" --yes
+scx2 dump -o after-store.json
+scx2 diff before-store.json after-store.json               # did slot 1:7 change?
+```
+
+Then power-cycle the amp and `dump` again: only a value that survives the power
+cycle proves the store path. Do the same for `scx2 rename` and `scx2 recall`.
+If `store` fails, the capture described in step 5 is the thing that unblocks it.
+
+`.fuse` round-trips are offline and already covered by `cargo test`; a useful
+hardware check is to import a FUSE preset, send it to the live buffer with the
+editor, and confirm the amp reports the same models and parameter bytes.
+
 ## What to send back
 
 * the output of `scan` and `dump`

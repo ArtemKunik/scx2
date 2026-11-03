@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use scx2::protocol::BANK_LIVE;
+use scx2::protocol::{BANK_AMP, BANK_LIVE};
 
 #[derive(Parser)]
 #[command(
@@ -66,6 +66,25 @@ pub(crate) enum Command {
         before: PathBuf,
         /// Newer backup
         after: PathBuf,
+    },
+    /// Import a Fender FUSE `.fuse` preset into a JSON backup
+    Import {
+        /// `.fuse` file written by Fender FUSE
+        file: PathBuf,
+        /// Where to write the one-preset JSON backup
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+    },
+    /// Export one preset from a backup as a Fender FUSE `.fuse` file
+    Export {
+        /// JSON file written by `scx2 dump`
+        file: PathBuf,
+        /// Preset to export, as `bank:index` (e.g. `1:7`)
+        #[arg(long)]
+        preset: String,
+        /// Where to write the `.fuse` file
+        #[arg(short, long)]
+        out: PathBuf,
     },
     /// Print reports as the amp sends them
     Monitor {
@@ -154,6 +173,55 @@ pub(crate) enum Command {
         /// Do not send the model-change execute frame after every block
         #[arg(long)]
         no_execute: bool,
+    },
+    /// Recall a stored preset (experimental: the SCX2 has not confirmed the frame)
+    Recall {
+        /// Preset slot to recall
+        slot: u8,
+        /// Bank to recall from (1 amp presets, 2 fx presets)
+        #[arg(long, default_value_t = BANK_AMP)]
+        bank: u8,
+        /// HID path to open (see `scx2 scan`)
+        #[arg(long)]
+        path: Option<String>,
+        /// Actually transmit
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Store the live buffer into a preset slot (experimental: the save frame is unknown)
+    Store {
+        /// Target bank (1 amp presets, 2 fx presets)
+        #[arg(long, default_value_t = BANK_AMP)]
+        bank: u8,
+        /// Target preset index
+        #[arg(long)]
+        index: u8,
+        /// Rename the stored preset as part of the store
+        #[arg(long)]
+        name: Option<String>,
+        /// HID path to open (see `scx2 scan`)
+        #[arg(long)]
+        path: Option<String>,
+        /// Actually transmit
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Rename a stored preset (experimental: the name-write path is untested)
+    Rename {
+        /// New name, at most 32 characters
+        name: String,
+        /// Bank holding the preset
+        #[arg(long, default_value_t = BANK_AMP)]
+        bank: u8,
+        /// Preset index
+        #[arg(long)]
+        index: u8,
+        /// HID path to open (see `scx2 scan`)
+        #[arg(long)]
+        path: Option<String>,
+        /// Actually transmit
+        #[arg(long)]
+        yes: bool,
     },
     /// Send one direct parameter change (Mustang numbering)
     Param {

@@ -55,7 +55,7 @@ impl App {
         ui.add_space(8.0);
         ui.label(
             egui::RichText::new(
-                "Drag a cell on the Live Buffer to change it. Right-click to add it to the panel. Effect parameters are on the pedals above.",
+                "Drag a cell on the Live Buffer to change it. Right-click to add it to the panel. Effect parameters are on the pedals and in the Effect Parameters panel above.",
             )
             .font(regular(11.5))
             .color(TEXT_3),

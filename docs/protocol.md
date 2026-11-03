@@ -192,7 +192,9 @@ Other reports:
 | Report | Meaning | Status |
 | --- | --- | --- |
 | `00 00 05 <status>` | answer to a direct-control write, about 1 ms later; 0 means accepted. The value is not echoed | measured |
-| `1d 01 01 <n>`, `1d 01 02 <n>` | selector knob position (`n` = 6 and 5 with `'65 Deluxe` live) | sent at the end of a dump; whether they also arrive when the knob turns is untested |
+| `05 01 <module> <model lo> <model hi> <index> <index> 01 00 <value lo> <value hi>` | one effect parameter; `<module>` was 5 for delay and 6 for reverb, `<index>` is block offset `32 + index`, and `round(value / 257)` is the byte | decoded from the capture |
+| `1d 01 <index> <position>` | selector knob position (`index` 1/2, positions 6/5 with `'65 Deluxe` live) | sent at the end of a dump; whether they also arrive when the knob turns is untested |
+| `1f 01 00 <n> ...` | state summary before the block stream; the payload after the marker is not decoded | marker known, payload unknown |
 
 `ff c5`, which FUSE uses to ask for the current preset only, returns the full
 dump on this amp (195 reports, about 1.9 s), so a dump is always the slow path.
@@ -202,16 +204,20 @@ The live buffer does come first, within the first few reports.
 
 * **Storing a preset.** There must be a "write to slot" command; FUSE sends it
   after you press save. Writing bank 0 only changes the live sound, and a
-  power cycle discards it.
+  power cycle discards it. `scx2 store` is the best available experiment: it
+  re-addresses every live block to the target bank/index and sends the execute
+  frame. It is deliberately marked experimental and prints every frame; treat
+  a successful `scx2 dump` afterwards as the only evidence that it worked.
 * **Meaning of the parameter bytes.** Offsets 32+ hold the amp parameters in
   some order (gain, volume, treble, bass, ...). Map them by turning one knob at
   a time while `scx2 learn` is running.
 * **Renaming a preset.** The name lives in the `0x04` block; whether writing it
-  back with the execute frame renames a stored slot is untested.
-* **The rest of the trailing reports**: `1f 01 00 24 ...` and the `05 01 05` /
-  `05 01 06` effect values at the end of a dump. See
-  [Reports the amp sends by itself](#reports-the-amp-sends-by-itself) for the
-  ones that are understood.
+  back with the execute frame renames a stored slot is untested. `scx2 rename`
+  sends exactly that frame and says so; it does not claim success.
+* **The payload of the `1f 01` state summary.** The marker and its position
+  before a dump are known, but the bytes after it are not decoded. The
+  `05 01 <module>` effect values and `1d` selector positions are now decoded;
+  see [Reports the amp sends by itself](#reports-the-amp-sends-by-itself).
 
 ## Recording your own capture
 

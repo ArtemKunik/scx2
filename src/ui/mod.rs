@@ -10,6 +10,7 @@ mod dial;
 mod edits;
 mod fx;
 mod fxmodels;
+mod fxpanel;
 mod hardware;
 mod knobs;
 mod paint;
@@ -55,10 +56,37 @@ impl eframe::App for App {
         self.elapsed_flash(dt);
         self.pump(ctx);
         self.active_offset = None;
+        handle_shortcuts(self, ctx);
         handle_drops(self, ctx);
         let art = current_art(self, ctx);
         view::show(self, ctx, &art);
         self.send_live_edits();
+    }
+}
+
+fn handle_shortcuts(app: &mut App, ctx: &egui::Context) {
+    let (undo, redo, open, save) = ctx.input(|i| {
+        let command = i.modifiers.command;
+        (
+            command && !i.modifiers.shift && i.key_pressed(egui::Key::Z),
+            command
+                && ((i.modifiers.shift && i.key_pressed(egui::Key::Z))
+                    || i.key_pressed(egui::Key::Y)),
+            command && i.key_pressed(egui::Key::O),
+            command && i.key_pressed(egui::Key::S),
+        )
+    });
+    if undo {
+        app.undo();
+    }
+    if redo {
+        app.redo();
+    }
+    if open {
+        app.open_dialog();
+    }
+    if save {
+        app.save_dialog();
     }
 }
 
@@ -71,7 +99,10 @@ fn handle_drops(app: &mut App, ctx: &egui::Context) {
             .collect()
     });
     if let Some(path) = dropped.first() {
-        if path.extension().is_some_and(|ext| ext == "json") {
+        if path
+            .extension()
+            .is_some_and(|ext| ext == "json" || ext == "fuse")
+        {
             app.load_file(path);
         }
     }

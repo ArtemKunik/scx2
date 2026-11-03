@@ -90,16 +90,37 @@ is expected and excluded from `scx2 diff` output.
 ## Other blocks
 
 Every block repeats the same layout: `slot` at 18, model id at 16, parameters
-from 32. The stomp/mod/delay/reverb meanings are still unmapped; `scx2 learn`
-is the tool for that (turn a knob on the amp, watch which offsets move).
+from 32. FUSE gives every effect model a six-slot parameter list, and the names
+below are the ones FUSE itself uses. They are **not yet verified on SCX2
+hardware**; `scx2 learn` is still the way to confirm them.
 
-The editor makes these blocks editable anyway: click an effect slot to choose a
-model (or clear it with `None`), and drag the knobs drawn on the pedal to write
-the first three parameter bytes (`32`, `33`, `34`). The knob legends come from
-the pedal face, not from a verified parameter map, so treat them as labels until
-`scx2 learn` says otherwise. Loading a model into a preset that does not carry
-that block creates a frame with the preset's bank/index and the observed default
-slot for the effect kind; the live buffer always has all four blocks.
+| Model | Block | Offsets 32..37 |
+| --- | --- | --- |
+| Compressor `0x0007` | stomp | Level, Thresh, Ratio, Attack, Release |
+| Overdrive `0x003c` | stomp | Level, Gain, Low, Mid, High |
+| Green Box `0x00ba` | stomp | Level, Gain, Tone, Blend |
+| Sine Chorus `0x0012` | mod | Level, Rate, Depth, Avg Dly, LR Phase |
+| Vibratone `0x002d` | mod | Level, Rotor, Depth, Fdbk, LR Phase |
+| Sine Tremolo `0x0041` | mod | Level, Rate, Duty, LFO Clip, Tri Shape |
+| Phaser `0x004f` | mod | Level, Rate, Depth, Fdbk, Shape |
+| Mono Delay `0x0016` | delay | Level, Time, Fdbk, Bright, Atten |
+| Tape Delay `0x002b` | delay | Level, Time, Fdbk, Flutter, Bright, Stereo |
+| Spring '65 `0x000b` | reverb | Level, Decay, Dwell, Diff, Tone |
+| Small Hall `0x0024` | reverb | Level, Decay, Dwell, Diff, Tone |
+
+The full table lives in `src/models.rs` (`effect_params`), and it covers every
+model in the Mustang-wide list, not only the ones this capture happened to use.
+
+The editor makes these blocks editable: click an effect slot to choose a model
+(or clear it with `None`), drag the knobs drawn on the pedal, or open **Effect
+Parameters** for all 32 bytes. Loading a model gives it that model's default
+parameter bytes: FUSE's captured defaults where they are known, otherwise a
+neutral `0x80` in every slot the model uses. A model that is not in the default
+table therefore no longer inherits the previous effect's settings.
+
+Loading a model into a preset that does not carry that block creates a frame
+with the preset's bank/index and the observed default slot for the effect kind;
+the live buffer always has all four blocks.
 
 ## How to read a block
 

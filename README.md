@@ -7,8 +7,9 @@ Fender FUSE is gone and the amplifier still speaks a simple 64-byte HID
 protocol over USB. This project talks to it directly.
 
 > **Status: read and write verified on hardware** (Super Champ X2, firmware
-> `May 30 2013`). Dumping, polling and live parameter writes work; storing into
-> a preset slot is still unknown. Writes stay dry-run unless you pass `--yes`.
+> `May 30 2013`). Dumping, polling, live parameter writes, effect editing and
+> `.fuse` import/export work. Storing into a preset slot is still experimental:
+> the real save frame is unknown. Writes stay dry-run unless you pass `--yes`.
 > The decoder is also covered by tests against a real FUSE capture.
 > See [docs/test-plan.md](docs/test-plan.md).
 
@@ -26,11 +27,17 @@ scx2 diff a.json b.json         # byte-level comparison of two backups
 scx2 learn                      # watch the live buffer, map knobs to offsets
 scx2 monitor                    # print every report the amp sends
 scx2 replay capture.pcap        # decode a USBPcap recording, no amp needed
+scx2 import song.fuse -o song.json   # import a Fender FUSE preset
+scx2 export backup.json --preset 1:7 -o song.fuse
 
 # writes (dry run unless --yes)
 scx2 apply amp --offset 35 --value 0x63 --from backup.json
 scx2 send --hex "1c c1 05 00 00 00 01 01"
 scx2 restore backup.json
+# experimental, unverified on SCX2: recall/store/rename
+scx2 recall 7 --bank 1
+scx2 store --bank 1 --index 7 --name "My preset"
+scx2 rename "My preset" --bank 1 --index 7
 ```
 
 `dump` and `replay` both print the full preset memory:
@@ -65,10 +72,21 @@ where the parameter bytes put them.
 
 The four effect slots are editable too: click a slot to load or change its
 effect, drag the knobs drawn on the pedal to change that effect's parameters,
-and right-click (or hover and press the `x`) to clear it. The effect parameter
-meanings are not mapped yet, so the editor binds the first three parameter
-bytes to the knobs shown on the pedal; `scx2 learn` is the way to find out what
-they really do.
+and right-click (or hover and press the `x`) to clear it. The knob names now
+come from FUSE's own model table (Level, Time, Fdbk, Depth, Mix and so on), and
+loading a model gives it that model's default parameter bytes instead of
+inheriting the previous effect's settings.
+
+Open **Effect Parameters** for the complete editor: all 32 bytes of every
+effect block, with the FUSE name for the slots the model uses. The names and
+defaults are not yet verified on SCX2 hardware, so the panel says so; `scx2
+learn` is still the way to confirm them.
+
+The toolbar has **Open…**, **Save As…**, **Save Backup**, **Undo**, **Redo**
+and **Revert**, with Ctrl+O / Ctrl+S / Ctrl+Z / Ctrl+Shift+Z shortcuts. A `●`
+in the title means the current dump has unsaved changes. `Open` and the drag
+target accept both JSON backups and Fender FUSE `.fuse` files; `Save As` writes
+JSON for the whole dump, or `.fuse` for the selected preset.
 
 The `+` on the panel lists the front-panel set and, below it, the parameters only direct
 control can reach (presence, master, bias, gate, cabinet, sag, bright...).
@@ -100,9 +118,10 @@ The amp is a composite HID device (`1ED8:000E`) with a vendor-defined HID
 interface carrying 64-byte reports. The frame layout, the handshake, the three
 banks and the model id tables are documented in
 [docs/protocol.md](docs/protocol.md); the known parameters in
-[docs/parameters.md](docs/parameters.md); the firmware that ships inside
-FUSE 2.7.1 in [docs/firmware.md](docs/firmware.md); and what is inside that
-firmware image in [docs/firmware-voices.md](docs/firmware-voices.md).
+[docs/parameters.md](docs/parameters.md); the `.fuse` XML format in
+[docs/fuse.md](docs/fuse.md); the firmware that ships inside FUSE 2.7.1 in
+[docs/firmware.md](docs/firmware.md); and what is inside that firmware image in
+[docs/firmware-voices.md](docs/firmware-voices.md).
 
 ```
 src/main.rs        entry point
@@ -110,7 +129,8 @@ src/cli/           scan, dump, replay, apply, param/probe, restore
 src/protocol/      frames, message decoding, dump/preset model, diff, JSON
 src/params.rs      direct-control frames, magic table, knob catalogue
 src/capture.rs     USBPcap (.pcap) reader for offline work
-src/models.rs      DSP model id -> name tables
+src/fuse.rs        Fender FUSE `.fuse` XML import/export
+src/models.rs      DSP model id -> name tables, effect params/defaults, FUSE ids
 src/transport.rs   hidapi device discovery and I/O
 src/ui/            egui editor: app state, amp view, procedural materials
 src/windows.rs     console detach and error dialog
@@ -128,9 +148,10 @@ src/windows.rs     console detach and error dialog
 - [x] Confirm transport and write direction on hardware (block + `1c 03`)
 - [x] Map the amp parameters through direct control (`param`, `probe`)
 - [x] Desktop editor with real knobs and optional hidden controls
-- [ ] Map the stomp/mod/delay/reverb offsets (`scx2 learn`)
-- [ ] Store/rename presets (needs the save frame)
-- [ ] Load/save Fender FUSE `.fuse` preset files
+- [x] Add FUSE's effect parameter names and per-model defaults
+- [ ] Verify the effect map and defaults on SCX2 hardware (`scx2 learn`)
+- [ ] Store/rename presets (experimental commands exist; the save frame is unknown)
+- [x] Load/save Fender FUSE `.fuse` preset files
 
 ## Safety
 
@@ -146,6 +167,9 @@ verified; a power cycle discards it.
 * Model id tables and the Mustang framing reference:
   [snhirsch/mustang-midi-bridge](https://github.com/snhirsch/mustang-midi-bridge) (GPL-3.0),
   `docs/reference/` keeps the relevant source files for reference.
+* Effect parameter names, per-model defaults and the `.fuse` XML shape:
+  [jtangelder/refuse](https://github.com/jtangelder/refuse), used as reference
+  data for FUSE's own model definitions.
 * [OpenFUSE](https://github.com/dbarbashov/openfuse) (MIT) pointed to the meaning
   of the `0x05` and `0x1d` reports and the write acknowledgement; they were then
   checked on real hardware where noted in `docs/protocol.md`.

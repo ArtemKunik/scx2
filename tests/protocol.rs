@@ -16,6 +16,36 @@ fn loaded_dump() -> Dump {
 }
 
 #[test]
+fn recall_frames_carry_a_bank_and_slot() {
+    let amp = protocol::patch_change(7);
+    assert_eq!((amp[0], amp[1], amp[2]), (0x1c, 0x01, 0x01));
+    assert_eq!((amp[3], amp[4]), (0, 7));
+
+    let fx = protocol::recall_preset(BANK_FX, 3);
+    assert_eq!((fx[3], fx[4]), (BANK_FX, 3));
+}
+
+#[test]
+fn a_name_block_is_nul_padded_and_retargetable() {
+    let raw = protocol::name_change(BANK_AMP, 4, "Tweed");
+    assert_eq!(raw[2], Kind::Name.code());
+    assert_eq!((raw[3], raw[4]), (BANK_AMP, 4));
+    assert_eq!(&raw[16..21], b"Tweed");
+    assert!(raw[21..48].iter().all(|byte| *byte == 0));
+
+    let mut block = [0u8; protocol::REPORT_SIZE];
+    block[0] = 0x1c;
+    block[1] = 0x01;
+    block[2] = Kind::Stomp.code();
+    block[16] = 0xba;
+    block[32] = 0x42;
+    let moved = protocol::retarget(&block, BANK_AMP, 9);
+    assert_eq!((moved[3], moved[4]), (BANK_AMP, 9));
+    assert_eq!(moved[16], 0xba);
+    assert_eq!(moved[32], 0x42);
+}
+
+#[test]
 fn capture_is_a_complete_dump() {
     let dump = loaded_dump();
     assert!(dump.ended, "the capture ends with the amp acknowledgement");

@@ -104,7 +104,7 @@ impl App {
             let mut knob_hovered = false;
             for (knob, control) in controls.iter().enumerate() {
                 let rect =
-                    Rect::from_center_size(control.center, Vec2::splat(control.radius * 2.6));
+                    Rect::from_center_size(control.center, Vec2::splat(control.radius * 3.0));
                 let response = ui.interact(
                     rect,
                     Id::new(("fx-knob", kind.label(), knob)),
@@ -142,13 +142,13 @@ impl App {
                         stroke(1.4, Color32::from_white_alpha(120)),
                     );
                 }
-                if response.dragged() {
+                if response.hovered() || response.dragged() {
                     painter.text(
                         control.center - Vec2::new(0.0, control.radius + 7.0),
                         Align2::CENTER_BOTTOM,
                         format!("{value}"),
                         semibold(10.5),
-                        AMBER,
+                        if edited { AMBER } else { TEXT },
                     );
                 }
                 response
@@ -269,12 +269,27 @@ impl App {
                             .font(semibold(11.0))
                             .color(TEXT_3),
                     );
-                    for (id, label) in models::table(kind).unwrap_or(&[]) {
-                        if ui.selectable_label(*id == model, *label).clicked() {
-                            chosen = Some(*id);
-                            ui.close_menu();
-                        }
-                    }
+                    ui.label(
+                        egui::RichText::new("SCX2 = seen in the bundled capture")
+                            .font(regular(9.5))
+                            .color(TEXT_3),
+                    );
+                    egui::ScrollArea::vertical()
+                        .max_height(360.0)
+                        .show(ui, |ui| {
+                            ui.set_min_width(190.0);
+                            for (id, label) in models::table(kind).unwrap_or(&[]) {
+                                let text = if models::observed(kind, *id) {
+                                    format!("{label}   SCX2")
+                                } else {
+                                    label.to_string()
+                                };
+                                if ui.selectable_label(*id == model, text).clicked() {
+                                    chosen = Some(*id);
+                                    ui.close_menu();
+                                }
+                            }
+                        });
                 },
             );
             if let Some(id) = chosen {

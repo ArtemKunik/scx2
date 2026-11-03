@@ -2,11 +2,12 @@
 //! backup load/save helpers and the table renderer.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
 use scx2::capture;
+use scx2::fuse;
 use scx2::models;
 use scx2::protocol::{self, Dump, Kind, Preset, BANK_AMP, BANK_FX, BANK_LIVE};
 pub(crate) fn replay(pcap: &Path, json: bool, out: Option<&Path>) -> Result<()> {
@@ -35,7 +36,51 @@ pub(crate) fn default_dump_name() -> String {
 
 pub(crate) fn load_dump(path: &Path) -> Result<Dump> {
     let text = fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    if path
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("fuse"))
+    {
+        let preset = fuse::parse(&text).with_context(|| format!("parsing {}", path.display()))?;
+        return Ok(Dump::single(preset));
+    }
     Dump::from_json(&text).with_context(|| format!("parsing {}", path.display()))
+}
+
+pub(crate) fn import(file: &Path, out: Option<PathBuf>) -> Result<()> {
+    let text = fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
+    let preset = fuse::parse(&text).with_context(|| format!("parsing {}", file.display()))?;
+    let name = preset.name.clone();
+    let dump = Dump::single(preset);
+    let out = out.unwrap_or_else(|| PathBuf::from("scx2-imported.json"));
+    write_dump(&dump, &out)?;
+    println!(
+        "imported {name:?} from {}\nsaved {}",
+        file.display(),
+        out.display()
+    );
+    Ok(())
+}
+
+pub(crate) fn export(file: &Path, selector: &str, out: &Path) -> Result<()> {
+    let dump = load_dump(file)?;
+    let (bank, index) = parse_selector(selector)?;
+    let preset = dump
+        .get(bank, index)
+        .with_context(|| format!("no preset {bank}:{index} in {}", file.display()))?;
+    let xml = fuse::export(preset)?;
+    fs::write(out, xml).with_context(|| format!("writing {}", out.display()))?;
+    println!(
+        "exported [{} {}] {} to {}",
+        bank_label(bank),
+        index,
+        if preset.name.is_empty() {
+            "(no name)"
+        } else {
+            &preset.name
+        },
+        out.display()
+    );
+    Ok(())
 }
 
 pub(crate) fn show(file: &Path, preset: Option<&str>, raw: bool) -> Result<()> {
@@ -178,5 +223,5 @@ pub(crate) fn truncate(text: &str, width: usize) -> String {
     text.chars()
         .take(width.saturating_sub(1))
         .collect::<String>()
-        + "Ã¢â‚¬Â¦"
+        + "…"
 }
