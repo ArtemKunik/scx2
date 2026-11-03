@@ -29,6 +29,11 @@ const ACCENT_DIM: Color32 = Color32::from_rgb(120, 92, 40);
 const GOOD: Color32 = Color32::from_rgb(96, 208, 140);
 const BAD: Color32 = Color32::from_rgb(226, 106, 106);
 const EDITED: Color32 = Color32::from_rgb(93, 156, 236);
+const TOLEX: Color32 = Color32::from_rgb(13, 14, 17);
+const SILVER: Color32 = Color32::from_rgb(198, 203, 211);
+const SILVER_DARK: Color32 = Color32::from_rgb(128, 135, 146);
+const PLATE_INK: Color32 = Color32::from_rgb(22, 24, 28);
+const JEWEL: Color32 = Color32::from_rgb(233, 76, 60);
 
 /// Built-in demo material, so the UI is usable before the amp is connected.
 const DEMO_CAPTURE: &[u8] = include_bytes!("../captures/fuse-scx2-2021-06-07.pcap");
@@ -251,6 +256,7 @@ impl App {
                     self.connected = true;
                     self.connecting = false;
                     self.banner = banner;
+                    self.source = "SuperChamp X2  [1ed8:000e]".into();
                     self.status = "connected".into();
                 }
                 Ev::Dump(dump) => {
@@ -282,10 +288,9 @@ impl App {
 
     fn handle_live_dump(&mut self, dump: Dump) {
         if self.polling {
-            if let (Some(previous), Some(current)) = (
-                self.last_live.as_ref().and_then(Dump::live),
-                dump.live(),
-            ) {
+            if let (Some(previous), Some(current)) =
+                (self.last_live.as_ref().and_then(Dump::live), dump.live())
+            {
                 let changes = protocol::diff_presets(previous, current);
                 for change in &changes {
                     if change.offset >= protocol::OFF_PARAMS {
@@ -346,7 +351,9 @@ impl App {
                 self.dump
                     .get(bank, index)?
                     .block(Kind::from_code(code))
-                    .map(|message| protocol::as_host_frame(message.as_bytes(), protocol::HOST_CONTROL))
+                    .map(|message| {
+                        protocol::as_host_frame(message.as_bytes(), protocol::HOST_CONTROL)
+                    })
             })
             .collect();
         if frames.is_empty() {
@@ -359,8 +366,7 @@ impl App {
             }
             _ => {
                 self.error = Some(
-                    "no amp connected: the changes are kept locally, connect to send them"
-                        .into(),
+                    "no amp connected: the changes are kept locally, connect to send them".into(),
                 );
             }
         }
@@ -442,21 +448,37 @@ impl eframe::App for App {
 
         egui::TopBottomPanel::top("header")
             .exact_height(74.0)
-            .frame(egui::Frame::none().fill(PANEL).inner_margin(egui::Margin::symmetric(18.0, 12.0)))
+            .frame(
+                egui::Frame::none()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(18.0, 12.0)),
+            )
             .show(ctx, |ui| self.header(ui));
 
         egui::TopBottomPanel::bottom("footer")
             .exact_height(58.0)
-            .frame(egui::Frame::none().fill(PANEL).inner_margin(egui::Margin::symmetric(18.0, 10.0)))
+            .frame(
+                egui::Frame::none()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(18.0, 10.0)),
+            )
             .show(ctx, |ui| self.footer(ui));
 
         egui::SidePanel::left("presets")
             .exact_width(282.0)
-            .frame(egui::Frame::none().fill(PANEL).inner_margin(egui::Margin::symmetric(12.0, 12.0)))
+            .frame(
+                egui::Frame::none()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(12.0, 12.0)),
+            )
             .show(ctx, |ui| self.preset_list(ui));
 
         egui::CentralPanel::default()
-            .frame(egui::Frame::none().fill(BG).inner_margin(egui::Margin::same(18.0)))
+            .frame(
+                egui::Frame::none()
+                    .fill(BG)
+                    .inner_margin(egui::Margin::same(18.0)),
+            )
             .show(ctx, |ui| self.body(ui));
     }
 }
@@ -560,7 +582,11 @@ impl App {
                     self.dump = self.original.clone();
                     self.status = "changes reverted".into();
                 }
-                let learn_label = if self.polling { "Stop learning" } else { "Learn" };
+                let learn_label = if self.polling {
+                    "Stop learning"
+                } else {
+                    "Learn"
+                };
                 if ui
                     .add_enabled(
                         self.connected || self.polling,
@@ -637,11 +663,7 @@ impl App {
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                for (title, rows) in [
-                    ("LIVE", &live),
-                    ("AMP PRESETS", &amp),
-                    ("FX PRESETS", &fx),
-                ] {
+                for (title, rows) in [("LIVE", &live), ("AMP PRESETS", &amp), ("FX PRESETS", &fx)] {
                     section_heading(ui, title);
                     for (bank, index, name, sub) in rows {
                         if preset_row(ui, name, sub, selected == (*bank, *index)).clicked() {
@@ -678,7 +700,11 @@ fn preset_row(ui: &mut Ui, name: &str, sub: &str, selected: bool) -> egui::Respo
     } else if response.hovered() {
         painter.rect_filled(rect, 9.0, HOVER);
     }
-    let name_color = if selected { TEXT } else { TEXT };
+    let name_color = if selected {
+        TEXT
+    } else {
+        Color32::from_rgb(206, 210, 218)
+    };
     painter.text(
         rect.left_top() + Vec2::new(12.0, 9.0),
         Align2::LEFT_TOP,
@@ -716,7 +742,8 @@ fn subtitle(preset: &protocol::Preset) -> String {
 
 fn status_pill(ui: &mut Ui, color: Color32, label: &str) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(92.0, 24.0), Sense::hover());
-    ui.painter().rect_filled(rect, 12.0, color.gamma_multiply(0.18));
+    ui.painter()
+        .rect_filled(rect, 12.0, color.gamma_multiply(0.18));
     ui.painter()
         .circle_filled(rect.left_center() + Vec2::new(14.0, 0.0), 4.0, color);
     ui.painter().text(
@@ -795,26 +822,27 @@ impl App {
         };
         let mut frame = *amp.as_bytes();
         let original = frame;
+        let model = amp.model().unwrap_or(0);
+        let voice = models::model_name(Kind::Amp, model).unwrap_or("unknown voice");
+        let connected = self.connected;
 
         egui::Frame::none()
-            .fill(PANEL)
-            .rounding(14.0)
-            .inner_margin(egui::Margin::same(18.0))
+            .fill(TOLEX)
+            .rounding(16.0)
+            .stroke(stroke(1.0, Color32::from_rgb(44, 38, 33)))
+            .inner_margin(egui::Margin::same(16.0))
             .show(ui, |ui| {
+                let (plate, _) =
+                    ui.allocate_exact_size(Vec2::new(ui.available_width(), 62.0), Sense::hover());
+                paint_faceplate(ui, plate, voice, connected);
+                ui.add_space(14.0);
+
                 ui.horizontal(|ui| {
                     ui.label(
-                        egui::RichText::new("AMPLIFIER")
-                            .font(FontId::proportional(10.0))
-                            .color(ACCENT)
+                        egui::RichText::new("CONTROLS")
+                            .font(FontId::proportional(9.5))
+                            .color(Color32::from_rgb(120, 124, 134))
                             .strong(),
-                    );
-                    ui.label(
-                        egui::RichText::new(
-                            models::model_name(Kind::Amp, amp.model().unwrap_or(0))
-                                .unwrap_or("unknown voice"),
-                        )
-                        .font(FontId::proportional(11.0))
-                        .color(MUTED),
                     );
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if ui.small_button("+ knob").clicked() {
@@ -822,7 +850,7 @@ impl App {
                         }
                     });
                 });
-                ui.add_space(10.0);
+                ui.add_space(2.0);
 
                 ui.horizontal_wrapped(|ui| {
                     let knobs = self.knobs.clone();
@@ -842,7 +870,6 @@ impl App {
                             if knob.offset == 44 { ACCENT } else { EDITED },
                         );
                         if response.secondary_clicked() {
-                            // unbind
                             self.knobs.retain(|k| k.offset != knob.offset);
                         }
                     }
@@ -855,42 +882,40 @@ impl App {
                          parameters start at offset 32",
                     )
                     .font(FontId::proportional(10.0))
-                    .color(MUTED),
+                    .color(Color32::from_rgb(120, 124, 134)),
                 );
 
-                ui.add_space(14.0);
+                ui.add_space(16.0);
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new("PARAMETERS")
-                            .font(FontId::proportional(10.0))
-                            .color(ACCENT)
+                            .font(FontId::proportional(9.5))
+                            .color(Color32::from_rgb(120, 124, 134))
                             .strong(),
                     );
                     ui.label(
                         egui::RichText::new("32..63 - 0x80 is centre")
-                            .font(FontId::proportional(10.0))
-                            .color(MUTED),
+                            .font(FontId::proportional(9.5))
+                            .color(Color32::from_rgb(96, 100, 110)),
                     );
                 });
                 ui.add_space(6.0);
 
                 let mut bind_request = None;
-                ui.horizontal_wrapped(|ui| {
-                    for index in 0..32 {
-                        let offset = protocol::OFF_PARAMS + index;
-                        let flash = self.flash.get(&offset).copied().unwrap_or(0.0);
-                        let response = param_cell(
-                            ui,
-                            offset,
-                            &mut frame[offset],
-                            original[offset],
-                            flash,
-                        );
-                        if response.secondary_clicked() {
-                            bind_request = Some(offset);
+                let columns = (((ui.available_width() + 8.0) / 52.0).floor() as usize).clamp(4, 8);
+                for row_start in (0..32).step_by(columns) {
+                    ui.horizontal(|ui| {
+                        for index in row_start..(row_start + columns).min(32) {
+                            let offset = protocol::OFF_PARAMS + index;
+                            let flash = self.flash.get(&offset).copied().unwrap_or(0.0);
+                            let response =
+                                param_cell(ui, offset, &mut frame[offset], original[offset], flash);
+                            if response.secondary_clicked() {
+                                bind_request = Some(offset);
+                            }
                         }
-                    }
-                });
+                    });
+                }
                 if let Some(offset) = bind_request {
                     self.add_knob_at(offset);
                 }
@@ -1029,6 +1054,75 @@ fn voice_model_id(index: u8) -> u16 {
 // widgets
 // ---------------------------------------------------------------------------
 
+fn paint_faceplate(ui: &Ui, rect: Rect, voice: &str, connected: bool) {
+    let painter = ui.painter();
+
+    // brushed metal: a flat fill, a bright top edge and a dark bottom edge
+    painter.rect_filled(rect, 9.0, SILVER);
+    let inner = rect.shrink(1.0);
+    painter.line_segment(
+        [
+            inner.left_top() + Vec2::new(6.0, 1.0),
+            inner.right_top() + Vec2::new(-6.0, 1.0),
+        ],
+        stroke(1.0, Color32::from_rgb(236, 239, 244)),
+    );
+    painter.line_segment(
+        [
+            inner.left_bottom() + Vec2::new(6.0, -1.0),
+            inner.right_bottom() + Vec2::new(-6.0, -1.0),
+        ],
+        stroke(1.0, SILVER_DARK),
+    );
+    painter.rect_stroke(rect, 9.0, stroke(1.0, Color32::from_rgb(96, 102, 112)));
+
+    // pilot jewel
+    let jewel = rect.left_center() + Vec2::new(24.0, 0.0);
+    let glow = if connected {
+        JEWEL
+    } else {
+        Color32::from_rgb(70, 40, 38)
+    };
+    painter.circle_filled(jewel, 11.0, glow.gamma_multiply(0.25));
+    painter.circle_filled(jewel, 6.5, glow);
+    painter.circle_filled(
+        jewel - Vec2::new(1.5, 1.5),
+        2.5,
+        glow.gamma_multiply(1.0).linear_multiply(0.8),
+    );
+    painter.circle_stroke(jewel, 7.5, stroke(1.0, Color32::from_rgb(60, 64, 72)));
+
+    painter.text(
+        rect.left_center() + Vec2::new(46.0, -9.0),
+        Align2::LEFT_CENTER,
+        "SUPER CHAMP X2",
+        FontId::proportional(21.0),
+        PLATE_INK,
+    );
+    painter.text(
+        rect.left_center() + Vec2::new(48.0, 13.0),
+        Align2::LEFT_CENTER,
+        "FENDER  -  TUBE AMPLIFIER",
+        FontId::proportional(8.5),
+        Color32::from_rgb(60, 64, 72),
+    );
+
+    painter.text(
+        rect.right_center() + Vec2::new(-18.0, -8.0),
+        Align2::RIGHT_CENTER,
+        voice,
+        FontId::proportional(16.0),
+        PLATE_INK,
+    );
+    painter.text(
+        rect.right_center() + Vec2::new(-18.0, 12.0),
+        Align2::RIGHT_CENTER,
+        "VOICE",
+        FontId::proportional(8.5),
+        Color32::from_rgb(60, 64, 72),
+    );
+}
+
 fn knob_widget(
     ui: &mut Ui,
     value: &mut u8,
@@ -1056,10 +1150,31 @@ fn knob_widget(
     let t = (*value as f32 / range).clamp(0.0, 1.0);
     let painter = ui.painter();
 
-    painter.circle_filled(center + Vec2::new(0.0, 3.0), radius + 3.0, Color32::from_rgb(10, 11, 14));
+    painter.circle_filled(
+        center + Vec2::new(0.0, 3.0),
+        radius + 7.0,
+        Color32::from_rgb(6, 7, 9),
+    );
+    painter.circle_filled(center, radius + 6.0, Color32::from_rgb(16, 17, 21));
+    painter.circle_stroke(
+        center,
+        radius + 6.0,
+        stroke(1.0, Color32::from_rgb(48, 51, 60)),
+    );
+    for tick in 0..11 {
+        let angle = start + (end - start) * tick as f32 / 10.0;
+        let dir = Vec2::new(angle.cos(), angle.sin());
+        painter.line_segment(
+            [center + dir * (radius + 2.5), center + dir * (radius + 5.0)],
+            stroke(1.0, Color32::from_rgb(74, 79, 90)),
+        );
+    }
 
     let track = arc_points(center, radius + 10.0, start, end);
-    painter.add(egui::Shape::line(track, stroke(4.0, Color32::from_rgb(46, 50, 60))));
+    painter.add(egui::Shape::line(
+        track,
+        stroke(4.0, Color32::from_rgb(46, 50, 60)),
+    ));
     if t > 0.005 {
         let arc = arc_points(center, radius + 10.0, start, start + (end - start) * t);
         painter.add(egui::Shape::line(arc, stroke(4.0, accent)));
@@ -1067,19 +1182,34 @@ fn knob_widget(
 
     // knob body: a few concentric circles fake a soft bevel
     painter.circle_filled(center, radius, Color32::from_rgb(22, 24, 29));
-    painter.circle_filled(center - Vec2::new(0.0, 1.0), radius - 2.0, Color32::from_rgb(36, 39, 47));
-    painter.circle_filled(center - Vec2::new(0.0, 3.0), radius - 7.0, Color32::from_rgb(46, 50, 60));
+    painter.circle_filled(
+        center - Vec2::new(0.0, 1.0),
+        radius - 2.0,
+        Color32::from_rgb(36, 39, 47),
+    );
+    painter.circle_filled(
+        center - Vec2::new(0.0, 3.0),
+        radius - 7.0,
+        Color32::from_rgb(46, 50, 60),
+    );
     painter.circle_stroke(center, radius, stroke(1.0, Color32::from_rgb(58, 63, 74)));
 
     let angle = start + (end - start) * t;
     let dir = Vec2::new(angle.cos(), angle.sin());
     painter.line_segment(
-        [center + dir * (radius * 0.3), center + dir * (radius * 0.82)],
+        [
+            center + dir * (radius * 0.3),
+            center + dir * (radius * 0.82),
+        ],
         stroke(3.0, Color32::WHITE),
     );
 
     if response.hovered() {
-        painter.circle_stroke(center, radius + 14.0, stroke(1.0, accent.gamma_multiply(0.5)));
+        painter.circle_stroke(
+            center,
+            radius + 14.0,
+            stroke(1.0, accent.gamma_multiply(0.5)),
+        );
     }
 
     painter.text(
@@ -1111,7 +1241,13 @@ fn arc_points(center: Pos2, radius: f32, from: f32, to: f32) -> Vec<Pos2> {
         .collect()
 }
 
-fn param_cell(ui: &mut Ui, offset: usize, value: &mut u8, original: u8, flash: f32) -> egui::Response {
+fn param_cell(
+    ui: &mut Ui,
+    offset: usize,
+    value: &mut u8,
+    original: u8,
+    flash: f32,
+) -> egui::Response {
     let size = Vec2::new(44.0, 52.0);
     let (rect, mut response) = ui.allocate_exact_size(size, Sense::click_and_drag());
     if response.dragged() {
@@ -1148,11 +1284,7 @@ fn param_cell(ui: &mut Ui, offset: usize, value: &mut u8, original: u8, flash: f
 
     if flash > 0.0 {
         let alpha = (flash / 1.4).clamp(0.0, 1.0);
-        painter.rect_stroke(
-            rect,
-            7.0,
-            stroke(2.0, ACCENT.gamma_multiply(alpha)),
-        );
+        painter.rect_stroke(rect, 7.0, stroke(2.0, ACCENT.gamma_multiply(alpha)));
     }
 
     painter.text(
@@ -1232,7 +1364,7 @@ fn effect_card(ui: &mut Ui, title: &str, preset: &protocol::Preset, kind: Kind) 
 pub fn run(from: Option<PathBuf>, path: Option<String>) -> anyhow::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1440.0, 900.0])
+            .with_inner_size([1400.0, 860.0])
             .with_min_inner_size([900.0, 560.0])
             .with_maximized(true)
             .with_title("Super Champ X2"),
@@ -1245,4 +1377,3 @@ pub fn run(from: Option<PathBuf>, path: Option<String>) -> anyhow::Result<()> {
     )
     .map_err(|error| anyhow::anyhow!("{error}"))
 }
-
