@@ -209,21 +209,18 @@ pub(crate) fn store(
         .live()
         .context("the dump did not contain a live buffer")?;
 
-    let mut frames: Vec<(String, [u8; protocol::REPORT_SIZE])> = Vec::new();
-    for message in live.messages() {
-        let raw = protocol::retarget(message.as_bytes(), bank, index);
-        frames.push((
-            message.summary(),
-            protocol::as_host_frame(&raw, protocol::HOST_CONTROL),
-        ));
-    }
-    if let Some(name) = name {
-        let raw = protocol::name_change(bank, index, name);
-        frames.push((
-            format!("name={name:?}"),
-            protocol::as_host_frame(&raw, protocol::HOST_CONTROL),
-        ));
-    }
+    let summaries: Vec<String> = live
+        .messages()
+        .iter()
+        .map(|message| message.summary())
+        .collect();
+    let frames = protocol::store_frames(live, bank, index, name);
+    let summary_at = |index: usize| {
+        summaries
+            .get(index)
+            .cloned()
+            .unwrap_or_else(|| format!("name={:?}", name.unwrap_or("")))
+    };
 
     println!(
         "store live buffer into bank {bank} index {index}: {} block(s)",
@@ -232,15 +229,15 @@ pub(crate) fn store(
     println!(
         "EXPERIMENTAL: the SCX2 save frame is unknown. This writes each block with the target bank/index and the execute frame. Verify with `scx2 dump` afterwards."
     );
-    for (summary, frame) in &frames {
-        println!("  {summary}  {}", protocol::hex(frame));
+    for (index, frame) in frames.iter().enumerate() {
+        println!("  {}  {}", summary_at(index), protocol::hex(frame));
     }
     if !yes {
         println!("dry run, add --yes to transmit");
         return Ok(());
     }
-    for (summary, frame) in &frames {
-        println!("sending {summary}");
+    for (index, frame) in frames.iter().enumerate() {
+        println!("sending {}", summary_at(index));
         amp.write_report(frame)?;
         sleep(Duration::from_millis(20));
         amp.write_report(&protocol::execute_model_change())?;

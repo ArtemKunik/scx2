@@ -68,7 +68,7 @@ pub use diff::{diff_dumps, diff_presets, Change};
 pub use dump::Dump;
 pub use frames::{
     as_host_frame, boot_banner, execute_model_change, handshake_step1, handshake_step2, hex,
-    name_change, parse_hex, patch_change, recall_preset, request_dump, retarget,
+    name_change, parse_hex, patch_change, recall_preset, request_dump, retarget, store_frames,
 };
 pub use kind::Kind;
 pub use message::Message;

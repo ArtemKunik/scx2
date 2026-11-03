@@ -74,6 +74,28 @@ pub fn retarget(raw: &[u8; REPORT_SIZE], bank: u8, index: u8) -> [u8; REPORT_SIZ
     buf
 }
 
+/// The host frames the experimental `store` command sends.
+///
+/// Every block of the preset is re-addressed to `bank`/`index`; an optional
+/// name replaces the preset's name block. The caller still has to send each
+/// frame with the execute frame, and the save path remains unverified.
+pub fn store_frames(
+    preset: &super::Preset,
+    bank: u8,
+    index: u8,
+    name: Option<&str>,
+) -> Vec<[u8; REPORT_SIZE]> {
+    let mut frames: Vec<[u8; REPORT_SIZE]> = preset
+        .messages()
+        .into_iter()
+        .map(|message| as_host_frame(&retarget(message.as_bytes(), bank, index), HOST_CONTROL))
+        .collect();
+    if let Some(name) = name {
+        frames.push(as_host_frame(&name_change(bank, index, name), HOST_CONTROL));
+    }
+    frames
+}
+
 /// The Mustang "execute" frame, sent after a model/preset frame.
 pub fn execute_model_change() -> [u8; REPORT_SIZE] {
     report(&[0x1C, 0x03])

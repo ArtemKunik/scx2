@@ -46,6 +46,24 @@ fn a_name_block_is_nul_padded_and_retargetable() {
 }
 
 #[test]
+fn store_frames_retarget_every_block_and_add_a_name() {
+    let mut preset = protocol::Preset::new(BANK_LIVE, 0);
+    preset.set_model(Kind::Amp, 0x0053);
+    preset.set_name("Live");
+    let blocks = preset.messages().len();
+
+    let frames = protocol::store_frames(&preset, BANK_AMP, 7, Some("Saved"));
+    assert_eq!(frames.len(), blocks + 1);
+    for frame in &frames {
+        assert_eq!(frame[1], protocol::HOST_CONTROL);
+        assert_eq!((frame[3], frame[4]), (BANK_AMP, 7));
+    }
+    let name = frames.last().unwrap();
+    assert_eq!(name[2], Kind::Name.code());
+    assert_eq!(&name[16..21], b"Saved");
+}
+
+#[test]
 fn capture_is_a_complete_dump() {
     let dump = loaded_dump();
     assert!(dump.ended, "the capture ends with the amp acknowledgement");
