@@ -137,7 +137,11 @@ pub(super) fn knob_widget(
         } else {
             regular(12.5)
         },
-        if edited { AMBER } else { look.ink.gamma_multiply(0.72) },
+        if edited {
+            AMBER
+        } else {
+            look.ink.gamma_multiply(0.72)
+        },
     );
 
     let hint = params::knob_spec(knob.offset)

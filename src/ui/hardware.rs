@@ -68,7 +68,10 @@ pub(super) fn brushed(painter: &Painter, rect: Rect) {
         } else {
             Color32::from_black_alpha(14)
         };
-        painter.line_segment([Pos2::new(left, y), Pos2::new(right, y)], stroke(0.6, color));
+        painter.line_segment(
+            [Pos2::new(left, y), Pos2::new(right, y)],
+            stroke(0.6, color),
+        );
     }
 }
 
@@ -95,7 +98,10 @@ pub(super) fn small_knob(
     };
     let dir = Vec2::new(angle.cos(), angle.sin());
     painter.line_segment(
-        [center + dir * (radius * 0.16), center + dir * (radius * 0.92)],
+        [
+            center + dir * (radius * 0.16),
+            center + dir * (radius * 0.92),
+        ],
         stroke(1.2, tip),
     );
 }
@@ -172,21 +178,26 @@ pub(super) fn legends(painter: &Painter, unit: Rect, fx: &Pedal) {
     );
 }
 
-pub(super) fn knob_row(painter: &Painter, fx: &Pedal, unit: Rect, y: f32, radius: f32) {
-    let span = unit.width() * 0.66;
-    for index in 0..fx.knobs {
-        let t = if fx.knobs == 1 {
-            0.5
-        } else {
-            index as f32 / (fx.knobs - 1) as f32
-        };
-        let center = Pos2::new(unit.center().x - span / 2.0 + span * t, y);
-        let angle = -2.35 + index as f32 * 0.55;
-        small_knob(painter, center, radius, fx.knob, fx.knob_cap, angle);
+/// Map a parameter byte to the pointer angle on a small knob.
+pub(super) fn knob_angle(value: u8) -> f32 {
+    -2.35 + value as f32 / 255.0 * 4.7
+}
+
+pub(super) fn knob_row(painter: &Painter, fx: &Pedal, unit: Rect, values: &[u8]) {
+    for (index, control) in fx.controls(unit).iter().enumerate() {
+        let value = values.get(index).copied().unwrap_or(0x80);
+        small_knob(
+            painter,
+            control.center,
+            control.radius,
+            fx.knob,
+            fx.knob_cap,
+            knob_angle(value),
+        );
         if let Some(label) = fx.labels.get(index) {
             spaced(
                 painter,
-                center + Vec2::new(0.0, radius + 4.0),
+                control.center + Vec2::new(0.0, control.radius + 4.0),
                 Align2::CENTER_TOP,
                 label,
                 super::theme::semibold(5.4),
@@ -212,13 +223,20 @@ pub(super) fn reels(painter: &Painter, window: Rect, body: Color32) {
     for center in centers {
         let radius = (window.height() * 0.38).min(17.0);
         painter.circle_filled(center, radius, Color32::from_rgb(20, 20, 22));
-        painter.circle_stroke(center, radius, stroke(1.4, Color32::from_rgb(150, 146, 132)));
+        painter.circle_stroke(
+            center,
+            radius,
+            stroke(1.4, Color32::from_rgb(150, 146, 132)),
+        );
         painter.circle_filled(center, radius * 0.22, body);
         for spoke in 0..6 {
             let angle = spoke as f32 * std::f32::consts::TAU / 6.0;
             let dir = Vec2::new(angle.cos(), angle.sin());
             painter.line_segment(
-                [center + dir * (radius * 0.26), center + dir * (radius * 0.88)],
+                [
+                    center + dir * (radius * 0.26),
+                    center + dir * (radius * 0.88),
+                ],
                 stroke(1.2, Color32::from_rgb(128, 124, 112)),
             );
         }

@@ -9,14 +9,23 @@ use super::hardware::*;
 use super::paint::{screw, spaced, spaced_italic, tile};
 use super::theme::*;
 
-pub(super) fn tape(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
+pub(super) fn tape(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal, values: &[u8]) {
     let radius = 7.0;
     shadow(painter, unit, radius);
     metal(painter, unit, radius, fx.body, fx.edge);
     brushed(painter, unit);
     painter.rect_stroke(unit, radius, stroke(1.0, Color32::from_black_alpha(130)));
+    spaced(
+        painter,
+        unit.center_top() + Vec2::new(0.0, 5.0),
+        Align2::CENTER_TOP,
+        fx.brand,
+        semibold(5.4),
+        fx.ink.gamma_multiply(0.75),
+        1.4,
+    );
     let window = Rect::from_min_max(
-        unit.left_top() + Vec2::new(10.0, 8.0),
+        unit.left_top() + Vec2::new(10.0, 16.0),
         unit.right_top() + Vec2::new(-10.0, 56.0),
     );
     painter.rect_filled(window, 4.0, Color32::from_rgb(22, 21, 18));
@@ -31,20 +40,11 @@ pub(super) fn tape(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
         fx.ink,
         1.2,
     );
-    spaced(
-        painter,
-        Pos2::new(unit.center().x, unit.bottom() - 10.0),
-        Align2::CENTER_BOTTOM,
-        fx.brand,
-        semibold(5.6),
-        fx.ink.gamma_multiply(0.7),
-        1.4,
-    );
-    knob_row(painter, fx, unit, unit.bottom() - 34.0, 8.0);
+    knob_row(painter, fx, unit, values);
     led(
         painter,
         art,
-        unit.right_top() + Vec2::new(-16.0, 16.0),
+        unit.right_top() + Vec2::new(-14.0, 8.0),
         fx.led,
         true,
     );
@@ -58,7 +58,7 @@ pub(super) fn tape(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
     }
 }
 
-pub(super) fn tank(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
+pub(super) fn tank(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal, values: &[u8]) {
     let radius = 6.0;
     shadow(painter, unit, radius);
     painter.rect_filled(unit, radius, fx.body);
@@ -107,20 +107,20 @@ pub(super) fn tank(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
         fx.ink,
         1.0,
     );
-    for (index, t) in [0.56, 0.72, 0.88].into_iter().enumerate() {
-        let center = Pos2::new(plate.left() + plate.width() * t, plate.center().y + 2.0);
+    for (index, control) in fx.controls(unit).iter().enumerate() {
+        let value = values.get(index).copied().unwrap_or(0x80);
         small_knob(
             painter,
-            center,
-            8.5,
+            control.center,
+            control.radius,
             fx.knob,
             fx.knob_cap,
-            -2.2 + index as f32 * 0.5,
+            knob_angle(value),
         );
         if let Some(label) = fx.labels.get(index) {
             spaced(
                 painter,
-                center + Vec2::new(0.0, 11.0),
+                control.center + Vec2::new(0.0, control.radius + 2.5),
                 Align2::CENTER_TOP,
                 label,
                 semibold(4.8),
@@ -146,7 +146,7 @@ pub(super) fn tank(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
     }
 }
 
-pub(super) fn rack(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
+pub(super) fn rack(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal, values: &[u8]) {
     let radius = 4.0;
     shadow(painter, unit, radius);
     painter.rect_filled(unit, radius, fx.body);
@@ -154,7 +154,13 @@ pub(super) fn rack(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
         unit.left_top() + Vec2::new(10.0, 5.0),
         unit.right_bottom() + Vec2::new(-10.0, -6.0),
     );
-    metal(painter, face, 2.0, fx.face, Color32::from_rgb(102, 104, 108));
+    metal(
+        painter,
+        face,
+        2.0,
+        fx.face,
+        Color32::from_rgb(102, 104, 108),
+    );
     painter.rect_stroke(face, 2.0, stroke(1.0, Color32::from_rgb(58, 60, 64)));
     for x in [unit.left() + 5.0, unit.right() - 5.0] {
         screw(painter, Pos2::new(x, unit.top() + 10.0));
@@ -184,20 +190,20 @@ pub(super) fn rack(painter: &Painter, art: &Art, unit: Rect, fx: &Pedal) {
         fx.ink,
         1.4,
     );
-    for (index, t) in [0.64, 0.82].into_iter().enumerate() {
-        let center = Pos2::new(face.left() + face.width() * t, face.center().y + 10.0);
+    for (index, control) in fx.controls(unit).iter().enumerate() {
+        let value = values.get(index).copied().unwrap_or(0x80);
         small_knob(
             painter,
-            center,
-            8.0,
+            control.center,
+            control.radius,
             fx.knob,
             fx.knob_cap,
-            -2.1 + index as f32 * 0.6,
+            knob_angle(value),
         );
         if let Some(label) = fx.labels.get(index) {
             spaced(
                 painter,
-                center + Vec2::new(0.0, 10.5),
+                control.center + Vec2::new(0.0, control.radius + 2.5),
                 Align2::CENTER_TOP,
                 label,
                 semibold(4.8),

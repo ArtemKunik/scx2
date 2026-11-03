@@ -82,6 +82,49 @@ impl App {
         }
     }
 
+    /// The effect block as the amp last reported it, used to mark edits.
+    pub(crate) fn effect_baseline(
+        &self,
+        preset: &protocol::Preset,
+        kind: Kind,
+    ) -> [u8; protocol::REPORT_SIZE] {
+        self.original
+            .get(preset.bank, preset.index)
+            .and_then(|known| known.block(kind))
+            .or_else(|| preset.block(kind))
+            .map(|block| *block.as_bytes())
+            .unwrap_or([0; protocol::REPORT_SIZE])
+    }
+
+    /// Load an effect model into the selected preset, or clear the slot with 0.
+    pub(crate) fn set_effect_model(&mut self, kind: Kind, model: u16) {
+        let (bank, index) = self.selected;
+        let Some(preset) = self.dump.get_mut(bank, index) else {
+            return;
+        };
+        if !preset.set_model(kind, model) {
+            return;
+        }
+        self.status = if model == 0 {
+            format!("Cleared the {} slot", kind.label())
+        } else {
+            format!(
+                "Loaded {} into the {} slot",
+                models::model_name(kind, model).unwrap_or("effect"),
+                kind.label()
+            )
+        };
+    }
+
+    /// Copy the effect parameter bytes that moved into the selected preset.
+    pub(crate) fn apply_effect(&mut self, kind: Kind, before: &[u8], after: &[u8]) {
+        for (index, (before, after)) in before.iter().zip(after).enumerate() {
+            if before != after {
+                self.apply_edit(kind, protocol::OFF_PARAMS + index, *after);
+            }
+        }
+    }
+
     pub(crate) fn apply_edit(&mut self, kind: Kind, offset: usize, value: u8) {
         let (bank, index) = self.selected;
         let Some(block) = self

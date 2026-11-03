@@ -133,7 +133,7 @@ impl Era {
                 era: self,
                 weave: Weave::Vinyl,
                 tolex: [0.052, 0.052, 0.055],
-                cloth: Cloth::Black,
+                cloth: Cloth::Silver,
                 panel: Panel::Gunmetal,
                 ink: Color32::from_rgb(226, 226, 222),
                 knob: KnobFinish::BlackChrome,
@@ -154,8 +154,8 @@ impl Era {
                 pointer: Color32::from_rgb(236, 62, 48),
                 pointer_shadow: Color32::from_rgb(28, 26, 26),
                 jewel: JewelTint::Red,
-                piping: Color32::from_rgb(142, 38, 30),
-                accent: Color32::from_rgb(206, 54, 42),
+                piping: Color32::from_rgb(184, 66, 52),
+                accent: Color32::from_rgb(226, 70, 54),
             },
         }
     }
@@ -250,5 +250,38 @@ pub enum JewelTint {
 impl JewelTint {
     pub fn index(self) -> usize {
         self as usize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_voice_gets_the_cabinet_it_was_built_for() {
+        for (model, era) in [
+            (0x007c, Era::Tweed),
+            (0x0067, Era::Tweed),
+            (0x0064, Era::Tweed),
+            (0x00ea, Era::Brownface),
+            (0x0053, Era::Blackface),
+            (0x006a, Era::Blackface),
+            (0x0075, Era::Blackface),
+            (0x005d, Era::Silverface),
+            (0x0061, Era::British),
+            (0x0079, Era::British),
+            (0x005e, Era::British),
+            (0x0072, Era::Modern),
+            (0x006d, Era::Metal),
+        ] {
+            assert_eq!(for_model(model).era, era, "model 0x{model:04x}");
+        }
+    }
+
+    #[test]
+    fn the_badge_names_the_era_and_its_years() {
+        let tag = Era::Blackface.look().tag();
+        assert!(tag.contains("Blackface"));
+        assert!(tag.contains("1964"));
     }
 }

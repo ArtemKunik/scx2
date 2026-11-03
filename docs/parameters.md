@@ -93,6 +93,14 @@ Every block repeats the same layout: `slot` at 18, model id at 16, parameters
 from 32. The stomp/mod/delay/reverb meanings are still unmapped; `scx2 learn`
 is the tool for that (turn a knob on the amp, watch which offsets move).
 
+The editor makes these blocks editable anyway: click an effect slot to choose a
+model (or clear it with `None`), and drag the knobs drawn on the pedal to write
+the first three parameter bytes (`32`, `33`, `34`). The knob legends come from
+the pedal face, not from a verified parameter map, so treat them as labels until
+`scx2 learn` says otherwise. Loading a model into a preset that does not carry
+that block creates a frame with the preset's bank/index and the observed default
+slot for the effect kind; the live buffer always has all four blocks.
+
 ## How to read a block
 
 ```console

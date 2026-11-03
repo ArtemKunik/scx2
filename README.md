@@ -57,6 +57,19 @@ The window mirrors the amp: Volume, Gain, Treble, Bass and Voice, the five
 knobs on the real front panel, plus Middle from FUSE, then the effect blocks. Dragging a knob changes
 the value; the `x` on the knob (or a right-click) removes it again.
 
+Everything is drawn, not shipped as bitmaps: the cabinet follows the selected
+voice's period (tweed, brownface, blackface, silverface, British, modern or
+metal), and each effect model gets its own hardware face - a stompbox, wah
+treadle, tape echo, spring reverb tank or rack processor - with knobs that sit
+where the parameter bytes put them.
+
+The four effect slots are editable too: click a slot to load or change its
+effect, drag the knobs drawn on the pedal to change that effect's parameters,
+and right-click (or hover and press the `x`) to clear it. The effect parameter
+meanings are not mapped yet, so the editor binds the first three parameter
+bytes to the knobs shown on the pedal; `scx2 learn` is the way to find out what
+they really do.
+
 The `+` on the panel lists the front-panel set and, below it, the parameters only direct
 control can reach (presence, master, bias, gate, cabinet, sag, bright...).
 Those hidden ones are labelled as guesses with a hint, because Fender never

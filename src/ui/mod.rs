@@ -3,23 +3,25 @@
 mod ampstyle;
 mod app;
 mod art;
+mod board;
 mod cabinet;
 mod chain;
 mod dial;
 mod edits;
 mod fx;
+mod fxmodels;
 mod hardware;
 mod knobs;
 mod paint;
 mod parameters;
 mod parts;
-mod units;
 mod pedal;
 mod sidebar;
 mod sync;
 mod texture;
 mod theme;
 mod toolbar;
+mod units;
 mod view;
 mod worker;
 

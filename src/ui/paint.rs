@@ -8,7 +8,7 @@ use eframe::egui::{
     Align2, Color32, FontId, Mesh, Painter, Pos2, Rect, Shape, TextureHandle, Vec2,
 };
 
-use super::ampstyle::Look;
+use super::ampstyle::{Era, Look};
 use super::art::Art;
 use super::theme::*;
 
@@ -95,11 +95,13 @@ pub(super) fn paint_grille(
         Color32::from_black_alpha(170),
     );
     cloth.rect_filled(plate, 3.0, Color32::from_rgb(150, 148, 142));
+    // A chrome badge on every era, so the dark panel of a blackface or a
+    // metal amp does not swallow its own name.
     tile(
         &cloth,
         plate.shrink(1.0),
         2.5,
-        &surface.panel,
+        &art.surface(Era::Silverface).panel,
         art.ppp,
         Color32::WHITE,
     );

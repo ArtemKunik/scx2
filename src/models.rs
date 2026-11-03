@@ -94,17 +94,24 @@ pub const REVERB_MODELS: &[(u16, &str)] = &[
     (0x000b, "Spring '65"),
 ];
 
-/// Look up a model name for a block kind.
-pub fn model_name(kind: Kind, id: u16) -> Option<&'static str> {
-    let table = match kind {
+/// The model table a block kind chooses from, `None` for blocks without one.
+///
+/// The first entry is always `(0, "None")`, which is how an empty effect slot
+/// is represented on the wire.
+pub fn table(kind: Kind) -> Option<&'static [(u16, &'static str)]> {
+    Some(match kind {
         Kind::Amp => AMP_MODELS,
         Kind::Stomp => STOMP_MODELS,
         Kind::Mod => MOD_MODELS,
         Kind::Delay => DELAY_MODELS,
         Kind::Reverb => REVERB_MODELS,
         _ => return None,
-    };
-    table
+    })
+}
+
+/// Look up a model name for a block kind.
+pub fn model_name(kind: Kind, id: u16) -> Option<&'static str> {
+    table(kind)?
         .iter()
         .find(|(model, _)| *model == id)
         .map(|(_, name)| *name)

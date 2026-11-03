@@ -17,7 +17,7 @@ use crate::protocol::{self, Kind, BANK_LIVE};
 
 pub(super) const CABINET_PAD: f32 = 16.0;
 
-const SLOT_W: f32 = 118.0;
+const SLOT_W: f32 = 102.0;
 
 const SLOT_H: f32 = 138.0;
 
@@ -76,7 +76,14 @@ impl App {
             }
             .tessellate(cabinet, Rounding::same(16.0)),
         ));
-        tile(&painter, cabinet, 16.0, &surface.tolex, art.ppp, Color32::WHITE);
+        tile(
+            &painter,
+            cabinet,
+            16.0,
+            &surface.tolex,
+            art.ppp,
+            Color32::WHITE,
+        );
         painter.rect_stroke(cabinet, 16.0, stroke(1.0, Color32::from_white_alpha(14)));
 
         // control panel in a thin chrome trim
@@ -92,7 +99,14 @@ impl App {
             ],
             stroke(1.0, look.piping),
         );
-        tile(&painter, panel, 5.0, &surface.panel, art.ppp, Color32::WHITE);
+        tile(
+            &painter,
+            panel,
+            5.0,
+            &surface.panel,
+            art.ppp,
+            Color32::WHITE,
+        );
         let sheen = Rect::from_min_size(panel.min, Vec2::new(panel.width(), 44.0))
             .shrink2(Vec2::new(1.0, 0.0));
         vertical_gradient(
