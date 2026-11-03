@@ -379,6 +379,10 @@ impl Preset {
         self.blocks.get(&kind.code())
     }
 
+    pub fn block_mut(&mut self, kind: Kind) -> Option<&mut Message> {
+        self.blocks.get_mut(&kind.code())
+    }
+
     pub fn name_message(&self) -> Option<&Message> {
         self.name_message.as_ref()
     }
@@ -528,6 +532,10 @@ impl Dump {
 
     pub fn get(&self, bank: u8, index: u8) -> Option<&Preset> {
         self.presets.get(&(bank, index))
+    }
+
+    pub fn get_mut(&mut self, bank: u8, index: u8) -> Option<&mut Preset> {
+        self.presets.get_mut(&(bank, index))
     }
 
     pub fn to_json(&self) -> Value {

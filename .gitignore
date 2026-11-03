@@ -2,3 +2,5 @@
 **/*.rs.bk
 *.pdb
 scx2-dump.json
+backup-*.json
+after*.json

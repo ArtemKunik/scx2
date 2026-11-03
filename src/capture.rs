@@ -63,27 +63,26 @@ impl<'a> Reader<'a> {
 /// Parse every packet in a USBPcap file.
 pub fn read_packets(path: &Path) -> Result<Vec<Packet>> {
     let data = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    packets_from_bytes(&data).with_context(|| format!("parsing {}", path.display()))
+}
+
+/// Parse every packet from an in-memory USBPcap file.
+pub fn packets_from_bytes(data: &[u8]) -> Result<Vec<Packet>> {
     if data.len() < 24 {
-        bail!("{}: too short to be a pcap file", path.display());
+        bail!("too short to be a pcap file");
     }
 
     let magic_le = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
     let big_endian = match magic_le {
         MAGIC_US | MAGIC_NS => false,
         m if m.swap_bytes() == MAGIC_US || m.swap_bytes() == MAGIC_NS => true,
-        other => bail!("{}: unknown pcap magic 0x{other:08x}", path.display()),
+        other => bail!("unknown pcap magic 0x{other:08x}"),
     };
 
-    let reader = Reader {
-        data: &data,
-        big_endian,
-    };
+    let reader = Reader { data, big_endian };
     let linktype = reader.u32(20);
     if linktype != LINKTYPE_USBPCAP {
-        bail!(
-            "{}: link type {linktype}, expected {LINKTYPE_USBPCAP} (USBPcap)",
-            path.display()
-        );
+        bail!("link type {linktype}, expected {LINKTYPE_USBPCAP} (USBPcap)");
     }
 
     let mut packets = Vec::new();
@@ -140,6 +139,20 @@ fn normalise(payload: &[u8]) -> Option<[u8; REPORT_SIZE]> {
 pub fn amp_reports(path: &Path) -> Result<Vec<[u8; REPORT_SIZE]>> {
     let mut out = Vec::new();
     for packet in read_packets(path)? {
+        if !packet.is_interrupt() || !packet.is_in() {
+            continue;
+        }
+        if let Some(report) = normalise(&packet.payload) {
+            out.push(report);
+        }
+    }
+    Ok(out)
+}
+
+/// Same as [`amp_reports`] but for an in-memory capture.
+pub fn amp_reports_from_bytes(data: &[u8]) -> Result<Vec<[u8; REPORT_SIZE]>> {
+    let mut out = Vec::new();
+    for packet in packets_from_bytes(data)? {
         if !packet.is_interrupt() || !packet.is_in() {
             continue;
         }

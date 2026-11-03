@@ -160,6 +160,16 @@ enum Command {
         #[arg(long)]
         execute: bool,
     },
+    /// Open the desktop editor
+    #[cfg(feature = "ui")]
+    Ui {
+        /// Backup to open at start (defaults to the bundled demo capture)
+        #[arg(long)]
+        from: Option<PathBuf>,
+        /// HID path to connect to at start
+        #[arg(long)]
+        path: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -221,6 +231,8 @@ fn run() -> Result<()> {
             yes,
             execute,
         } => restore(&file, path.as_deref(), bank, yes, execute),
+        #[cfg(feature = "ui")]
+        Command::Ui { from, path } => scx2::ui::run(from, path),
     }
 }
 
