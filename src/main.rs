@@ -22,8 +22,9 @@ use scx2::{capture, models, transport};
                   Everything is read-only unless you pass --yes to a write command."
 )]
 struct Cli {
+    /// Omit to open the desktop editor.
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -182,8 +183,54 @@ fn main() -> ExitCode {
     }
 }
 
+#[cfg(windows)]
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetConsoleProcessList(list: *mut u32, count: u32) -> u32;
+    fn FreeConsole() -> i32;
+}
+
+/// Close the console window when this process is its only user.
+#[cfg(windows)]
+fn detach_console_if_owner() {
+    let mut list = [0u32; 4];
+    // SAFETY: the pointer and length describe a stack buffer we own.
+    unsafe {
+        let attached = GetConsoleProcessList(list.as_mut_ptr(), list.len() as u32);
+        if attached == 1 {
+            FreeConsole();
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn detach_console_if_owner() {}
+
 fn run() -> Result<()> {
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    let command = match cli.command {
+        Some(command) => command,
+        #[cfg(feature = "ui")]
+        None => {
+            // Double-clicking the exe should open the editor without leaving a
+            // console window behind. A console that also hosts a shell is left
+            // untouched, so `scx2 ui` from a terminal behaves normally.
+            detach_console_if_owner();
+            Command::Ui {
+                from: None,
+                path: None,
+            }
+        }
+        #[cfg(not(feature = "ui"))]
+        None => {
+            use clap::CommandFactory;
+            Cli::command().print_help()?;
+            println!();
+            return Ok(());
+        }
+    };
+
+    match command {
         Command::Scan { all } => scan(all),
         Command::Replay { pcap, json, out } => replay(&pcap, json, out.as_deref()),
         Command::Dump { path, out } => dump(path.as_deref(), out),

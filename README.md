@@ -14,6 +14,9 @@ protocol over USB. This project talks to it directly.
 
 ## Commands
 
+Double-clicking `scx2.exe` (or running it with no arguments) opens the
+desktop editor. Everything below is the same binary from a terminal.
+
 ```console
 scx2 scan                       # list Fender HID devices
 scx2 dump -o backup.json        # read all presets into a JSON backup
