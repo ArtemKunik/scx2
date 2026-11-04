@@ -74,26 +74,33 @@ pub fn retarget(raw: &[u8; REPORT_SIZE], bank: u8, index: u8) -> [u8; REPORT_SIZ
     buf
 }
 
-/// The host frames the experimental `store` command sends.
+/// FUSE's save-preset frame.
 ///
-/// Every block of the preset is re-addressed to `bank`/`index`; an optional
-/// name replaces the preset's name block. The caller still has to send each
-/// frame with the execute frame, and the save path remains unverified.
-pub fn store_frames(
-    preset: &super::Preset,
-    bank: u8,
-    index: u8,
-    name: Option<&str>,
-) -> Vec<[u8; REPORT_SIZE]> {
-    let mut frames: Vec<[u8; REPORT_SIZE]> = preset
-        .messages()
-        .into_iter()
-        .map(|message| as_host_frame(&retarget(message.as_bytes(), bank, index), HOST_CONTROL))
-        .collect();
-    if let Some(name) = name {
-        frames.push(as_host_frame(&name_change(bank, index, name), HOST_CONTROL));
+/// The amp stores its **current live buffer** in `bank`/`index` under `name`;
+/// there is no per-block payload to send. This is the frame the `refuse`
+/// project calls `savePreset`, which in turn mirrors FUSE 2.7.1:
+///
+/// ```text
+/// 1c 01 03 <bank> <index> 00 01 01 <name at 16..48>
+/// ```
+///
+/// FUSE writes `0` in byte 3 because a Mustang has one flat preset list. The
+/// SCX2 has bank 1 (amp) and bank 2 (FX), and byte 3 selects the bank:
+/// verified on hardware by saving into `fx 15` and reading the slot back.
+pub fn save_preset(bank: u8, index: u8, name: &str) -> [u8; REPORT_SIZE] {
+    let mut buf = [0u8; REPORT_SIZE];
+    buf[0] = FRAME_MARKER;
+    buf[1] = 0x01; // DATA_READ
+    buf[2] = 0x03; // save-preset type
+    buf[3] = bank;
+    buf[4] = index;
+    buf[5] = 0x00;
+    buf[6] = 0x01;
+    buf[7] = 0x01;
+    for (index, byte) in name.as_bytes().iter().take(NAME_LEN).enumerate() {
+        buf[OFF_NAME + index] = *byte;
     }
-    frames
+    buf
 }
 
 /// The Mustang "execute" frame, sent after a model/preset frame.

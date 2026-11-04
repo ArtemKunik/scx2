@@ -163,6 +163,43 @@ but `scx2 diff` will show it after any write session.
 The UI and `scx2 apply` / `scx2 restore` send the execute frame automatically;
 `--no-execute` disables it for experiments.
 
+## Saving a preset
+
+Verified on hardware (2026-11-04, firmware `May 30 2013`): the save frame is
+
+```text
+host -> 1c 01 03 <bank> <index> 00 01 01 <name at 16..48>
+```
+
+The amp writes its **current live buffer** into `<bank>/<index>` and stores
+`<name>` (32 bytes, NUL padded). There is no per-block payload.
+
+* `bank` 1 is the amp preset bank, `2` the FX bank. FUSE writes `0` here because
+  a Mustang has one flat preset list; the SCX2 uses the bank byte.
+* Verified by saving into `fx 15` (empty, `NONE`) and `amp 15`, then reading both
+  slots back with `scx2 dump`. The names and contents changed as expected.
+* A stored slot also accepts a direct block write (`1c c3 ...` + `1c 03`); that
+  is how `scx2 restore` put the original bytes back after the test.
+* A power cycle has not been run yet, so flash persistence is still assumed
+  rather than proven.
+
+## Recalling a preset
+
+There is **no host recall** on the SCX2. FUSE's load frame
+
+```text
+1c 01 01 <bank> <slot> 00 01
+```
+
+makes the amp stream its current state (a read); type bytes `0x00`, `0x02` and
+`0x04` get no reply. Writing a preset's blocks to bank 0 is not a substitute:
+on this amp that edits the currently selected preset slot, which can overwrite
+stored memory. The front-panel preset knob is the only way to recall.
+
+Caution: after a recall attempt the amp's "current slot" pointer can move, so
+later bank-0 block writes may land in that slot. `scx2 recall` is therefore
+read-only: it prints the slot and its blocks.
+
 ## Reports the amp sends by itself
 
 Captured on hardware (2026-11-03, firmware `May 30 2013`) with `scx2 monitor`,
@@ -202,22 +239,20 @@ The live buffer does come first, within the first few reports.
 
 ## Still unknown
 
-* **Storing a preset.** There must be a "write to slot" command; FUSE sends it
-  after you press save. Writing bank 0 only changes the live sound, and a
-  power cycle discards it. `scx2 store` is the best available experiment: it
-  re-addresses every live block to the target bank/index and sends the execute
-  frame. It is deliberately marked experimental and prints every frame; treat
-  a successful `scx2 dump` afterwards as the only evidence that it worked.
+* **Power-cycle persistence.** The save frame updates the stored slot and a
+  fresh `scx2 dump` reads it back, but the amp has not been power-cycled since
+  the test. Only that proves the slot reached flash rather than RAM.
 * **Meaning of the parameter bytes.** Offsets 32+ hold the amp parameters in
   some order (gain, volume, treble, bass, ...). Map them by turning one knob at
   a time while `scx2 learn` is running.
-* **Renaming a preset.** The name lives in the `0x04` block; whether writing it
-  back with the execute frame renames a stored slot is untested. `scx2 rename`
-  sends exactly that frame and says so; it does not claim success.
 * **The payload of the `1f 01` state summary.** The marker and its position
   before a dump are known, but the bytes after it are not decoded. The
   `05 01 <module>` effect values and `1d` selector positions are now decoded;
   see [Reports the amp sends by itself](#reports-the-amp-sends-by-itself).
+
+Storing and renaming are no longer unknown: see
+[Saving a preset](#saving-a-preset). Renaming a stored slot was verified with
+both `scx2 store --name` and a direct `0x04` name block.
 
 ## Recording your own capture
 

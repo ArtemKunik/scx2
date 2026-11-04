@@ -7,10 +7,11 @@ Fender FUSE is gone and the amplifier still speaks a simple 64-byte HID
 protocol over USB. This project talks to it directly.
 
 > **Status: read and write verified on hardware** (Super Champ X2, firmware
-> `May 30 2013`). Dumping, polling, live parameter writes, effect editing and
-> `.fuse` import/export work. Storing into a preset slot is still experimental:
-> the real save frame is unknown. Writes stay dry-run unless you pass `--yes`.
-> The decoder is also covered by tests against a real FUSE capture.
+> `May 30 2013`). Dumping, polling, live parameter writes, effect editing,
+> `.fuse` import/export, **store** and **rename** work. Recall is read-only:
+> the SCX2 has no host preset-load command, so the front-panel knob is the only
+> way to load a slot. Writes stay dry-run unless you pass `--yes`. The decoder
+> is also covered by tests against a real FUSE capture.
 > See [docs/test-plan.md](docs/test-plan.md).
 
 ## Commands
@@ -34,10 +35,9 @@ scx2 export backup.json --preset 1:7 -o song.fuse
 scx2 apply amp --offset 35 --value 0x63 --from backup.json
 scx2 send --hex "1c c1 05 00 00 00 01 01"
 scx2 restore backup.json
-# experimental, unverified on SCX2: recall/store/rename
-scx2 recall 7 --bank 1
-scx2 store --bank 1 --index 7 --name "My preset"
-scx2 rename "My preset" --bank 1 --index 7
+scx2 store --bank 1 --index 7 --name "My preset"   # verified on hardware
+scx2 rename "My preset" --bank 1 --index 7         # verified on hardware
+scx2 recall 7 --bank 1                             # read-only: prints the slot
 ```
 
 `dump` and `replay` both print the full preset memory:
@@ -151,15 +151,18 @@ src/windows.rs     console detach and error dialog
 - [x] Desktop editor with real knobs and optional hidden controls
 - [x] Add FUSE's effect parameter names and per-model defaults
 - [ ] Verify the effect map and defaults on SCX2 hardware (`scx2 learn`)
-- [ ] Store/rename presets (experimental commands exist; the save frame is unknown)
+- [x] Store and rename presets (save frame verified on hardware)
+- [x] Determine how the SCX2 recalls a preset (there is no host command)
 - [x] Load/save Fender FUSE `.fuse` preset files
+- [ ] Confirm stored presets survive a power cycle
 
 ## Safety
 
 Every write command prints the exact frame it would send and stops unless
 `--yes` is given. `restore` additionally requires a full backup first (make
-one with `dump`). Only the live buffer is ever written until the store path is
-verified; a power cycle discards it.
+one with `dump`). `store` writes the live buffer into a stored slot, so keep a
+backup; `rename` writes only the `0x04` name block. Recall is read-only because
+the SCX2 has no host preset-load command.
 
 ## Credits
 

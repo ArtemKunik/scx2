@@ -122,7 +122,7 @@ Restore is the same mechanism as `apply`, just for every block. Do not run it
 with `--yes` until `apply` has been confirmed, otherwise you will be writing
 172 unverified frames into preset memory.
 
-## 7. Verify the new effect map and the experimental save path
+## 7. Verify the new effect map and the save path
 
 The effect parameter names/defaults now come from FUSE's model table. They are
 consistent with the capture but not yet proven on the SCX2:
@@ -132,24 +132,38 @@ consistent with the capture but not yet proven on the SCX2:
 3. Turn one knob at a time and run `scx2 learn`; record which offset moves.
 4. Repeat for a delay (Time, Fdbk, Flutter) and a reverb (Level, Decay, Dwell).
 
-The store/recall/rename commands are deliberately experimental. Test them only
-after `dump` and `apply` work, and keep a backup:
+### Save and rename: verified 2026-11-04
+
+The save frame was confirmed on hardware against `fx 15` (empty, `NONE`) and
+`amp 15`, then both slots were restored from the pre-write backup:
 
 ```console
 scx2 dump -o before-store.json
-scx2 store --bank 1 --index 7 --name "Store test"          # prints every frame
-scx2 store --bank 1 --index 7 --name "Store test" --yes
-scx2 dump -o after-store.json
-scx2 diff before-store.json after-store.json               # did slot 1:7 change?
+scx2 store --bank 2 --index 15 --name "SCX2 TEST"          # prints the frame
+scx2 store --bank 2 --index 15 --name "SCX2 TEST" --yes
+scx2 dump -o after-store.json                              # fx 15 renamed
+scx2 rename "Another name" --bank 2 --index 15 --yes       # name block only
 ```
 
-Then power-cycle the amp and `dump` again: only a value that survives the power
-cycle proves the store path. Do the same for `scx2 rename` and `scx2 recall`.
-If `store` fails, the capture described in step 5 is the thing that unblocks it.
+The save frame is `1c 01 03 <bank> <index> 00 01 01 <name>`. A stored slot also
+accepts a direct block write (`1c c3 ...` + `1c 03`), which is how the original
+bytes were put back.
 
-`.fuse` round-trips are offline and already covered by `cargo test`; a useful
-hardware check is to import a FUSE preset, send it to the live buffer with the
-editor, and confirm the amp reports the same models and parameter bytes.
+### Recall: no host command
+
+The SCX2 treats FUSE's `1c 01 01 <bank> <slot> 00 01` as a state read; type
+bytes `0x00`, `0x02` and `0x04` get no reply. The front-panel preset knob is the
+only way to load a slot. Do **not** write a preset's blocks to bank 0 to fake a
+recall: on this amp that edits the currently selected preset slot and can
+overwrite stored memory. `scx2 recall` is read-only for that reason.
+
+### Still open
+
+Power-cycle the amp after a `store` and `dump` again. Only a value that survives
+the power cycle proves the slot reached flash rather than RAM. `.fuse`
+round-trips are offline and already covered by `cargo test`; a useful hardware
+check is to import a FUSE preset, send it to the live buffer with the editor, and
+confirm the amp reports the same models and parameter bytes.
 
 ## What to send back
 

@@ -46,21 +46,16 @@ fn a_name_block_is_nul_padded_and_retargetable() {
 }
 
 #[test]
-fn store_frames_retarget_every_block_and_add_a_name() {
-    let mut preset = protocol::Preset::new(BANK_LIVE, 0);
-    preset.set_model(Kind::Amp, 0x0053);
-    preset.set_name("Live");
-    let blocks = preset.messages().len();
+fn the_save_frame_carries_a_bank_slot_and_name() {
+    let frame = protocol::save_preset(BANK_FX, 15, "Saved");
+    assert_eq!((frame[0], frame[1], frame[2]), (0x1c, 0x01, 0x03));
+    assert_eq!((frame[3], frame[4]), (BANK_FX, 15));
+    assert_eq!((frame[6], frame[7]), (0x01, 0x01));
+    assert_eq!(&frame[16..21], b"Saved");
+    assert!(frame[21..48].iter().all(|byte| *byte == 0));
 
-    let frames = protocol::store_frames(&preset, BANK_AMP, 7, Some("Saved"));
-    assert_eq!(frames.len(), blocks + 1);
-    for frame in &frames {
-        assert_eq!(frame[1], protocol::HOST_CONTROL);
-        assert_eq!((frame[3], frame[4]), (BANK_AMP, 7));
-    }
-    let name = frames.last().unwrap();
-    assert_eq!(name[2], Kind::Name.code());
-    assert_eq!(&name[16..21], b"Saved");
+    let amp = protocol::save_preset(BANK_AMP, 7, "Amp");
+    assert_eq!((amp[3], amp[4]), (BANK_AMP, 7));
 }
 
 #[test]

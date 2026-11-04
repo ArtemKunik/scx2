@@ -142,24 +142,32 @@ pub(crate) fn apply(
     Ok(())
 }
 
-/// Recall a stored preset.
+/// Show a stored preset and explain the SCX2's recall limitation.
 ///
-/// The frame is the Mustang patch-change shape. It is deliberately marked
-/// experimental: the SCX2 has not confirmed it, and the bank pairing is
-/// unknown. The command still refuses to send without `--yes`.
-pub(crate) fn recall(bank: u8, slot: u8, path: Option<&str>, yes: bool) -> Result<()> {
-    let frame = protocol::recall_preset(bank, slot);
-    println!("recall bank {bank} slot {slot} (experimental, unverified on SCX2)");
-    println!("frame: {}", protocol::hex(&frame));
-    if !yes {
-        println!("dry run, add --yes to transmit");
-        return Ok(());
-    }
+/// Verified on hardware: the SCX2 has no host preset-load opcode. FUSE's
+/// `1c 01 01` frame makes the amp stream its **current** state (a read), and
+/// type bytes `0x00`, `0x02` and `0x04` get no reply. Writing a preset's blocks
+/// to bank 0 is not a substitute: on this amp that edits the currently selected
+/// preset slot, which can overwrite stored memory. The front-panel preset knob
+/// is the only way to recall.
+///
+/// The command is therefore read-only: it prints the slot and its blocks.
+pub(crate) fn recall(bank: u8, slot: u8, path: Option<&str>) -> Result<()> {
     let amp = transport::Amp::open(path)?;
     println!("connected: {}", amp.describe()?);
     amp.handshake()?;
-    amp.write_report(&frame)?;
-    println!("sent");
+    let dump = amp.read_dump()?;
+    let preset = dump
+        .get(bank, slot)
+        .with_context(|| format!("no preset {bank}:{slot} in the dump"))?;
+
+    println!("[{} {}] {:?}", bank, slot, preset.name);
+    for message in preset.messages() {
+        println!("  {}", message.summary());
+    }
+    println!(
+        "The SCX2 has no host recall: `1c 01 01` is a state read, and the front-panel preset knob is the only way to load a slot. Nothing was written."
+    );
     Ok(())
 }
 
@@ -190,10 +198,10 @@ pub(crate) fn rename(name: &str, bank: u8, index: u8, path: Option<&str>, yes: b
 
 /// Store the live buffer into a preset slot.
 ///
-/// The real save frame is still unknown. This is the best available
-/// experiment: every live block is re-addressed to the target bank/index and
-/// written with the execute frame the amp already accepts. It prints exactly
-/// what it will send and requires `--yes`.
+/// Uses FUSE's save-preset frame (`1c 01 03 ...`): the amp writes its current
+/// live buffer into `bank`/`index` under `name`. Byte 3 is the bank, which is
+/// what the SCX2 uses; FUSE always writes 0 because a Mustang has one flat
+/// preset list. The command prints the exact frame and only sends with `--yes`.
 pub(crate) fn store(
     bank: u8,
     index: u8,
@@ -201,49 +209,23 @@ pub(crate) fn store(
     path: Option<&str>,
     yes: bool,
 ) -> Result<()> {
-    let amp = transport::Amp::open(path)?;
-    println!("connected: {}", amp.describe()?);
-    amp.handshake()?;
-    let dump = amp.read_dump()?;
-    let live = dump
-        .live()
-        .context("the dump did not contain a live buffer")?;
+    let name = name.unwrap_or("");
+    let frame = protocol::save_preset(bank, index, name);
 
-    let summaries: Vec<String> = live
-        .messages()
-        .iter()
-        .map(|message| message.summary())
-        .collect();
-    let frames = protocol::store_frames(live, bank, index, name);
-    let summary_at = |index: usize| {
-        summaries
-            .get(index)
-            .cloned()
-            .unwrap_or_else(|| format!("name={:?}", name.unwrap_or("")))
-    };
-
+    println!("store live buffer into bank {bank} index {index} as {name:?}");
+    println!("frame: {}", protocol::hex(&frame));
     println!(
-        "store live buffer into bank {bank} index {index}: {} block(s)",
-        frames.len()
+        "Verify with `scx2 dump` afterwards; only a power cycle proves the slot is persistent."
     );
-    println!(
-        "EXPERIMENTAL: the SCX2 save frame is unknown. This writes each block with the target bank/index and the execute frame. Verify with `scx2 dump` afterwards."
-    );
-    for (index, frame) in frames.iter().enumerate() {
-        println!("  {}  {}", summary_at(index), protocol::hex(frame));
-    }
     if !yes {
         println!("dry run, add --yes to transmit");
         return Ok(());
     }
-    for (index, frame) in frames.iter().enumerate() {
-        println!("sending {}", summary_at(index));
-        amp.write_report(frame)?;
-        sleep(Duration::from_millis(20));
-        amp.write_report(&protocol::execute_model_change())?;
-        sleep(Duration::from_millis(20));
-    }
-    println!("done: {} block(s) sent", frames.len());
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    amp.write_report(&frame)?;
+    println!("sent save frame");
     Ok(())
 }
 

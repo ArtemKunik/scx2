@@ -174,21 +174,18 @@ pub(crate) enum Command {
         #[arg(long)]
         no_execute: bool,
     },
-    /// Recall a stored preset (experimental: the SCX2 has not confirmed the frame)
+    /// Show a stored preset and the SCX2 recall limitation (read-only)
     Recall {
-        /// Preset slot to recall
+        /// Preset slot to show
         slot: u8,
-        /// Bank to recall from (1 amp presets, 2 fx presets)
+        /// Bank to read (1 amp presets, 2 fx presets)
         #[arg(long, default_value_t = BANK_AMP)]
         bank: u8,
         /// HID path to open (see `scx2 scan`)
         #[arg(long)]
         path: Option<String>,
-        /// Actually transmit
-        #[arg(long)]
-        yes: bool,
     },
-    /// Store the live buffer into a preset slot (experimental: the save frame is unknown)
+    /// Store the live buffer into a preset slot
     Store {
         /// Target bank (1 amp presets, 2 fx presets)
         #[arg(long, default_value_t = BANK_AMP)]
@@ -206,7 +203,7 @@ pub(crate) enum Command {
         #[arg(long)]
         yes: bool,
     },
-    /// Rename a stored preset (experimental: the name-write path is untested)
+    /// Rename a stored preset
     Rename {
         /// New name, at most 32 characters
         name: String,

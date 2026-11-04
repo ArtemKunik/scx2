@@ -91,12 +91,7 @@ pub fn run() -> Result<()> {
             yes,
             no_execute,
         } => restore(&file, path.as_deref(), bank, yes, !no_execute),
-        Command::Recall {
-            slot,
-            bank,
-            path,
-            yes,
-        } => recall(bank, slot, path.as_deref(), yes),
+        Command::Recall { slot, bank, path } => recall(bank, slot, path.as_deref()),
         Command::Store {
             bank,
             index,
