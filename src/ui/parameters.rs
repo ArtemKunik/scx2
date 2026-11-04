@@ -4,7 +4,7 @@ use eframe::egui::{
     self, Align2, CursorIcon, FontId, Id, Margin, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2,
 };
 
-use super::dial::drag_value;
+use super::dial::{drag_value, scale10};
 use super::knobs::add_knob;
 use super::theme::*;
 use super::App;
@@ -173,7 +173,7 @@ fn param_cell(
     painter.text(
         rect.center() + Vec2::new(0.0, -2.0),
         Align2::CENTER_CENTER,
-        format!("{value:02x}", value = *value),
+        scale10(*value),
         FontId::monospace(14.0),
         if edited { AMBER } else { TEXT },
     );
@@ -206,7 +206,7 @@ fn param_cell(
     response
         .on_hover_cursor(CursorIcon::ResizeVertical)
         .on_hover_text(format!(
-            "Offset {offset}: {name}0x{value:02x} ({value})\nRight-click to add to the panel.",
-            value = *value,
+            "Offset {offset}: {name}{} / 10\nRight-click to add to the panel.",
+            scale10(*value),
         ))
 }

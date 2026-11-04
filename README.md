@@ -79,11 +79,15 @@ come from FUSE's own model table (Level, Time, Fdbk, Depth, Mix and so on), and
 loading a model gives it that model's default parameter bytes instead of
 inheriting the previous effect's settings.
 
-Open **Effect Parameters** for the complete editor: all 32 bytes of every
+Open **Effect Parameters** for the complete editor: all 32 parameters of every
 effect block, with the FUSE name for the slots the model uses. Each loaded
-effect also has a **Bypass** toggle (offset 22, FUSE's `BypassState`). The
-names, defaults and bypass byte are not yet verified on SCX2 hardware, so the
-panel says so; `scx2 learn` is still the way to confirm them.
+effect also has a **Bypass** toggle (offset 22, FUSE's `BypassState`, verified
+on hardware). The names and defaults come from FUSE's model table and are not
+yet verified by ear, so the panel says so; `scx2 learn` is the way to confirm
+them.
+
+Every knob and parameter cell is shown on a **0–10 scale**, like the amp's
+front panel; the full 0–255 byte is still what gets sent to the amp.
 
 The toolbar has **Open…**, **Save As…**, **Save Backup**, **Undo**, **Redo**
 and **Revert**, with Ctrl+O / Ctrl+S / Ctrl+Z / Ctrl+Shift+Z shortcuts. A `●`

@@ -3,6 +3,7 @@
 use crate::params;
 use crate::protocol::{self, Dump, Kind, Preset, BANK_LIVE};
 
+use super::dial::scale10;
 use super::App;
 
 const LOG_LINES: usize = 8;
@@ -107,8 +108,10 @@ impl Activity {
     pub(crate) fn line(&self) -> String {
         let name = params::offset_title(self.offset).unwrap_or_else(|| "Unnamed".into());
         format!(
-            "{name:<16} offset {:<3} {:02x} -> {:02x}",
-            self.offset, self.from, self.to
+            "{name:<16} offset {:<3} {} -> {}",
+            self.offset,
+            scale10(self.from),
+            scale10(self.to)
         )
     }
 }

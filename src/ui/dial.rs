@@ -126,7 +126,7 @@ pub(super) fn knob_widget(
             .unwrap_or("Unknown")
             .to_string()
     } else {
-        format!("{:.1}", *value as f32 / 255.0 * 10.0)
+        scale10(*value)
     };
     painter.text(
         center + Vec2::new(0.0, DIAL_R - 8.0),
@@ -159,10 +159,17 @@ pub(super) fn knob_widget(
         )
     };
     response.on_hover_cursor(cursor).on_hover_text(format!(
-        "{}: 0x{value:02x} ({value})\n{hint}{how}",
+        "{}: {} / 10\n{hint}{how}",
         knob.label,
-        value = *value,
+        scale10(*value),
     ))
+}
+
+/// A raw 0..255 parameter as the 0..10 scale shown on every knob and cell.
+///
+/// The amp still receives the full byte; this is display only.
+pub(super) fn scale10(value: u8) -> String {
+    format!("{:.1}", value as f32 / 255.0 * 10.0)
 }
 
 /// Tick marks and numerals silk-screened on the panel around a knob.
@@ -246,4 +253,17 @@ pub(super) fn remove_button(
     let other = Vec2::new(3.5, -3.5);
     painter.line_segment([center - other, center + other], stroke(1.25, ink));
     response.clicked()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::scale10;
+
+    #[test]
+    fn raw_bytes_map_to_the_zero_to_ten_scale() {
+        assert_eq!(scale10(0), "0.0");
+        assert_eq!(scale10(128), "5.0");
+        assert_eq!(scale10(200), "7.8");
+        assert_eq!(scale10(255), "10.0");
+    }
 }

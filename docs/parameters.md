@@ -8,6 +8,10 @@ Everything below was measured on a Super Champ X2 (fw `May 30 2013`) with
 `scx2 probe --from 0 --to 20 --value 64 --yes`, which writes each parameter
 and reports the block offsets that changed.
 
+The protocol always carries a raw byte (`0..255`), but the editor displays
+every knob and parameter cell on a **0–10 scale** (`byte / 255 * 10`) so it
+matches the amp's front panel. The byte sent to the amp is unchanged.
+
 ## Direct-control map
 
 | Index | Offset(s) | Name | Front panel | Notes |

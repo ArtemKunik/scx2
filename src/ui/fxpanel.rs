@@ -8,7 +8,7 @@ use eframe::egui::{
     self, Align2, CursorIcon, FontId, Id, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2,
 };
 
-use super::dial::drag_value;
+use super::dial::{drag_value, scale10};
 use super::theme::*;
 use super::App;
 use crate::models;
@@ -48,7 +48,7 @@ impl App {
         painter.text(
             rect.right_center(),
             Align2::RIGHT_CENTER,
-            "All 32 bytes per block · names from FUSE",
+            "All 32 parameters · 0–10 · names from FUSE",
             regular(11.5),
             TEXT_3,
         );
@@ -234,7 +234,7 @@ fn fx_cell(
     painter.text(
         rect.center() + Vec2::new(0.0, -1.0),
         Align2::CENTER_CENTER,
-        format!("{value:02x}"),
+        scale10(*value),
         FontId::monospace(13.0),
         if used { TEXT } else { TEXT_3 },
     );
@@ -265,7 +265,8 @@ fn fx_cell(
             CursorIcon::Default
         })
         .on_hover_text(format!(
-            "Offset {offset}: {name} = 0x{value:02x} ({value})\nEffect names come from FUSE's model map, not SCX2 hardware verification."
+            "Offset {offset}: {name} = {} / 10\nEffect names come from FUSE's model map, not SCX2 hardware verification.",
+            scale10(*value)
         ))
 }
 

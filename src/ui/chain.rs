@@ -4,7 +4,7 @@ use eframe::egui::{self, Align2, Color32, CursorIcon, Id, Pos2, Rect, Sense, Ui,
 
 use super::art::Art;
 use super::board;
-use super::dial::drag_value;
+use super::dial::{drag_value, scale10};
 use super::paint::spaced;
 use super::pedal;
 use super::theme::*;
@@ -146,7 +146,7 @@ impl App {
                     painter.text(
                         control.center - Vec2::new(0.0, control.radius + 7.0),
                         Align2::CENTER_BOTTOM,
-                        format!("{value}"),
+                        scale10(value),
                         semibold(10.5),
                         if edited { AMBER } else { TEXT },
                     );
@@ -159,11 +159,13 @@ impl App {
                     })
                     .on_hover_text(if editable {
                         format!(
-                            "{label}: 0x{value:02x} ({value})\nEffect parameter {offset} — the mapping is not verified.\nDrag to adjust. Hold Shift for fine control."
+                            "{label}: {} / 10\nEffect parameter {offset} — the mapping is not verified.\nDrag to adjust. Hold Shift for fine control.",
+                            scale10(value)
                         )
                     } else {
                         format!(
-                            "{label}: 0x{value:02x} ({value})\nChoose the Live Buffer to edit."
+                            "{label}: {} / 10\nChoose the Live Buffer to edit.",
+                            scale10(value)
                         )
                     });
             }
