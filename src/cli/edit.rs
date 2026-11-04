@@ -173,13 +173,14 @@ pub(crate) fn recall(bank: u8, slot: u8, path: Option<&str>) -> Result<()> {
 
 /// Rename a stored preset by writing its `0x04` name block.
 ///
-/// Writing the name block is not confirmed to persist a stored slot; the
-/// command prints the exact frame and only sends with `--yes`.
+/// Verified on hardware: writing the name block with the execute frame changes
+/// the stored slot's name (tested on `fx 15` and `amp 15`). The command prints
+/// the exact frame and only sends with `--yes`.
 pub(crate) fn rename(name: &str, bank: u8, index: u8, path: Option<&str>, yes: bool) -> Result<()> {
     let raw = protocol::name_change(bank, index, name);
     let frame = protocol::as_host_frame(&raw, protocol::HOST_CONTROL);
     println!(
-        "rename bank {bank} index {index} to {:?} (experimental, unverified on SCX2)",
+        "rename bank {bank} index {index} to {:?}",
         name.chars().take(protocol::NAME_LEN).collect::<String>()
     );
     println!("frame: {}", protocol::hex(&frame));
@@ -193,6 +194,35 @@ pub(crate) fn rename(name: &str, bank: u8, index: u8, path: Option<&str>, yes: b
     amp.write_report(&frame)?;
     amp.write_report(&protocol::execute_model_change())?;
     println!("sent name block + execute frame");
+    Ok(())
+}
+
+/// Bypass or enable a loaded effect with FUSE's fast frame.
+///
+/// Verified on hardware: `19 c3 <family> <state> <slot>` changes block offset
+/// 22 and toggling it back restores it. No execute frame is needed.
+pub(crate) fn bypass(kind: &str, slot: u8, off: bool, path: Option<&str>, yes: bool) -> Result<()> {
+    let kind = Kind::parse(kind)
+        .filter(|kind| kind.has_slot())
+        .with_context(|| {
+            format!("effect kind must be stomp, mod, delay or reverb, got {kind:?}")
+        })?;
+    let frame = protocol::bypass(kind, slot, off);
+    println!(
+        "{} {} slot {slot}",
+        if off { "bypass" } else { "enable" },
+        kind.label()
+    );
+    println!("frame: {}", protocol::hex(&frame));
+    if !yes {
+        println!("dry run, add --yes to transmit");
+        return Ok(());
+    }
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    amp.write_report(&frame)?;
+    println!("sent");
     Ok(())
 }
 

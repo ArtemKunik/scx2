@@ -220,6 +220,22 @@ pub(crate) enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// Bypass or enable a loaded effect (verified frame)
+    Bypass {
+        /// Effect kind: stomp, mod, delay or reverb
+        kind: String,
+        /// Effect slot (the block's slot byte, 0-7)
+        slot: u8,
+        /// Bypass the effect (omit to enable it)
+        #[arg(long)]
+        off: bool,
+        /// HID path to open (see `scx2 scan`)
+        #[arg(long)]
+        path: Option<String>,
+        /// Actually transmit
+        #[arg(long)]
+        yes: bool,
+    },
     /// Send one direct parameter change (Mustang numbering)
     Param {
         /// Parameter index, 0 volume, 1 gain, 4 treble, 6 bass, ...

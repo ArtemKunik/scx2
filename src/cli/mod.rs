@@ -13,7 +13,7 @@ use crate::windows::{detach_console_if_owner, report_ui_error};
 
 use self::args::{Cli, Command};
 use self::device::{dump, learn, monitor, scan};
-use self::edit::{apply, recall, rename, restore, send, store};
+use self::edit::{apply, bypass, recall, rename, restore, send, store};
 use self::offline::{diff, export, import, replay, show};
 use self::param::{param, probe};
 
@@ -106,6 +106,13 @@ pub fn run() -> Result<()> {
             path,
             yes,
         } => rename(&name, bank, index, path.as_deref(), yes),
+        Command::Bypass {
+            kind,
+            slot,
+            off,
+            path,
+            yes,
+        } => bypass(&kind, slot, off, path.as_deref(), yes),
         Command::Param {
             index,
             value,

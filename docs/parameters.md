@@ -91,8 +91,10 @@ is expected and excluded from `scx2 diff` output.
 
 Every block repeats the same layout: `slot` at 18, model id at 16, parameters
 from 32. FUSE gives every effect model a six-slot parameter list, and the names
-below are the ones FUSE itself uses. They are **not yet verified on SCX2
-hardware**; `scx2 learn` is still the way to confirm them.
+below are the ones FUSE itself uses. The names are **not yet verified on SCX2
+hardware**; `scx2 learn` is still the way to confirm them. The bypass byte
+(offset 22) *is* verified: `scx2 bypass` toggles it with FUSE's `19 c3` frame,
+and a dump shows `0` for on and `1` for bypassed.
 
 | Model | Block | Offsets 32..37 |
 | --- | --- | --- |

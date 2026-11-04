@@ -108,6 +108,22 @@ pub fn execute_model_change() -> [u8; REPORT_SIZE] {
     report(&[0x1C, 0x03])
 }
 
+/// FUSE's fast bypass frame: `19 c3 <family> <state> <slot>`.
+///
+/// `family` is the DSP kind minus 3 (stomp 3, mod 4, delay 5, reverb 6) and
+/// `state` is 1 for bypassed, 0 for enabled. Verified on hardware: toggling
+/// the live reverb changed block offset 22 and toggling it back restored it.
+pub fn bypass(kind: super::Kind, slot: u8, bypassed: bool) -> [u8; REPORT_SIZE] {
+    let family = match kind {
+        super::Kind::Stomp => 3,
+        super::Kind::Mod => 4,
+        super::Kind::Delay => 5,
+        super::Kind::Reverb => 6,
+        _ => 0,
+    };
+    report(&[0x19, HOST_CONTROL, family, u8::from(bypassed), slot])
+}
+
 /// Turn an amp report into a host report, keeping the payload untouched.
 pub fn as_host_frame(raw: &[u8; REPORT_SIZE], direction: u8) -> [u8; REPORT_SIZE] {
     let mut buf = *raw;

@@ -163,6 +163,20 @@ but `scx2 diff` will show it after any write session.
 The UI and `scx2 apply` / `scx2 restore` send the execute frame automatically;
 `--no-execute` disables it for experiments.
 
+## Bypassing an effect
+
+Verified on hardware (2026-11-04): FUSE has a fast bypass frame that needs no
+execute frame:
+
+```text
+host -> 19 c3 <family> <state> <slot>
+```
+
+`family` is the DSP kind minus 3: stomp `3`, mod `4`, delay `5`, reverb `6`.
+`state` is `1` for bypassed and `0` for enabled; `slot` is the block's slot
+byte (offset 18). Toggling the live reverb changed block offset 22 from `0` to
+`1`, and toggling it back restored `0`. `scx2 bypass reverb 5 --off` sends it.
+
 ## Saving a preset
 
 Verified on hardware (2026-11-04, firmware `May 30 2013`): the save frame is

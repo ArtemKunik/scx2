@@ -37,6 +37,7 @@ scx2 send --hex "1c c1 05 00 00 00 01 01"
 scx2 restore backup.json
 scx2 store --bank 1 --index 7 --name "My preset"   # verified on hardware
 scx2 rename "My preset" --bank 1 --index 7         # verified on hardware
+scx2 bypass reverb 5 --off                         # verified on hardware
 scx2 recall 7 --bank 1                             # read-only: prints the slot
 ```
 

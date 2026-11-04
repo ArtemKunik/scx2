@@ -59,6 +59,21 @@ fn the_save_frame_carries_a_bank_slot_and_name() {
 }
 
 #[test]
+fn the_bypass_frame_uses_kind_minus_three() {
+    let reverb = protocol::bypass(Kind::Reverb, 5, true);
+    assert_eq!(
+        (reverb[0], reverb[1], reverb[2], reverb[3], reverb[4]),
+        (0x19, protocol::HOST_CONTROL, 6, 1, 5)
+    );
+    let stomp = protocol::bypass(Kind::Stomp, 3, false);
+    assert_eq!((stomp[2], stomp[3], stomp[4]), (3, 0, 3));
+    let delay = protocol::bypass(Kind::Delay, 1, true);
+    assert_eq!(delay[2], 5);
+    let modulation = protocol::bypass(Kind::Mod, 4, false);
+    assert_eq!(modulation[2], 4);
+}
+
+#[test]
 fn capture_is_a_complete_dump() {
     let dump = loaded_dump();
     assert!(dump.ended, "the capture ends with the amp acknowledgement");
