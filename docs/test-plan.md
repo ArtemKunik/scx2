@@ -157,13 +157,15 @@ only way to load a slot. Do **not** write a preset's blocks to bank 0 to fake a
 recall: on this amp that edits the currently selected preset slot and can
 overwrite stored memory. `scx2 recall` is read-only for that reason.
 
-### Still open
+### Persistence: verified 2026-11-04
 
-Power-cycle the amp after a `store` and `dump` again. Only a value that survives
-the power cycle proves the slot reached flash rather than RAM. `.fuse`
-round-trips are offline and already covered by `cargo test`; a useful hardware
-check is to import a FUSE preset, send it to the live buffer with the editor, and
-confirm the amp reports the same models and parameter bytes.
+A marker was saved into `fx 15`, the amp was powered off and back on, and
+`scx2 dump` still reported `fx 15` as `PERSIST TEST`. The save path therefore
+reaches flash, not just RAM. The slot was then restored to `NONE`.
+
+`.fuse` round-trips are offline and already covered by `cargo test`; a useful
+hardware check is to import a FUSE preset, send it to the live buffer with the
+editor, and confirm the amp reports the same models and parameter bytes.
 
 ## What to send back
 

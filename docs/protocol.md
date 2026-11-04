@@ -194,8 +194,8 @@ The amp writes its **current live buffer** into `<bank>/<index>` and stores
   slots back with `scx2 dump`. The names and contents changed as expected.
 * A stored slot also accepts a direct block write (`1c c3 ...` + `1c 03`); that
   is how `scx2 restore` put the original bytes back after the test.
-* A power cycle has not been run yet, so flash persistence is still assumed
-  rather than proven.
+* Persistence is proven: the `fx 15` marker still read back as `PERSIST TEST`
+  after a full power cycle, so the save reaches flash rather than RAM.
 
 ## Recalling a preset
 
@@ -253,9 +253,6 @@ The live buffer does come first, within the first few reports.
 
 ## Still unknown
 
-* **Power-cycle persistence.** The save frame updates the stored slot and a
-  fresh `scx2 dump` reads it back, but the amp has not been power-cycled since
-  the test. Only that proves the slot reached flash rather than RAM.
 * **Meaning of the parameter bytes.** Offsets 32+ hold the amp parameters in
   some order (gain, volume, treble, bass, ...). Map them by turning one knob at
   a time while `scx2 learn` is running.

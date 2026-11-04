@@ -66,5 +66,6 @@ writes the selected preset.
 * `.fuse` files do not carry the amp's raw reserved bytes. Import creates a
   clean block from the model and parameters; export writes the model,
   parameters, slot and bypass state.
-* Writing a `.fuse` back to an amp still needs the store frame, which is not
-  known yet. See `docs/protocol.md`.
+* To put a `.fuse` preset on the amp, import it (it lands in the live buffer),
+  then use `scx2 store --bank <1|2> --index <n>`; the save frame is verified
+  and survives a power cycle. See `docs/protocol.md`.

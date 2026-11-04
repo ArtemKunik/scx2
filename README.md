@@ -8,9 +8,10 @@ protocol over USB. This project talks to it directly.
 
 > **Status: read and write verified on hardware** (Super Champ X2, firmware
 > `May 30 2013`). Dumping, polling, live parameter writes, effect editing,
-> `.fuse` import/export, **store** and **rename** work. Recall is read-only:
-> the SCX2 has no host preset-load command, so the front-panel knob is the only
-> way to load a slot. Writes stay dry-run unless you pass `--yes`. The decoder
+> `.fuse` import/export, **store** and **rename** work, and a saved slot
+> survives a power cycle. Recall is read-only: the SCX2 has no host preset-load
+> command, so the front-panel knob is the only way to load a slot. Writes stay
+> dry-run unless you pass `--yes`. The decoder
 > is also covered by tests against a real FUSE capture.
 > See [docs/test-plan.md](docs/test-plan.md).
 
@@ -155,7 +156,7 @@ src/windows.rs     console detach and error dialog
 - [x] Store and rename presets (save frame verified on hardware)
 - [x] Determine how the SCX2 recalls a preset (there is no host command)
 - [x] Load/save Fender FUSE `.fuse` preset files
-- [ ] Confirm stored presets survive a power cycle
+- [x] Confirm stored presets survive a power cycle
 
 ## Safety
 
