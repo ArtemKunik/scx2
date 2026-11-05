@@ -1,4 +1,4 @@
-//! Windows-only console and dialog helpers.
+//! Platform console and dialog helpers.
 
 #[cfg(windows)]
 #[link(name = "kernel32")]
@@ -50,6 +50,8 @@ pub(crate) fn report_ui_error(message: &str) {
     }
     #[cfg(not(windows))]
     {
-        let _ = message;
+        // The terminal (or the desktop launcher's journal) is the only place
+        // left to report a failed editor start.
+        eprintln!("{message}");
     }
 }

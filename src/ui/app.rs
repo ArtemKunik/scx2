@@ -68,6 +68,13 @@ pub struct App {
     pub(crate) show_fx_params: bool,
     pub(crate) show_tuner: bool,
     pub(crate) show_recorder: bool,
+    /// Which effect slot is open in the focused editor, if any.
+    pub(crate) fx_editor: Option<crate::protocol::Kind>,
+    /// Whether that editor is showing the model list instead of its controls.
+    pub(crate) fx_editor_list: bool,
+    /// False on the frame the editor opens, so the click that opened it cannot
+    /// also dismiss it through the backdrop.
+    pub(crate) fx_editor_armed: bool,
     /// Whether the amp/speaker picker prefers to open above the grille plate.
     pub(crate) picker_above: bool,
     pub(crate) tuner: Tuner,
@@ -178,6 +185,9 @@ impl App {
             show_fx_params: false,
             show_tuner: false,
             show_recorder: false,
+            fx_editor: None,
+            fx_editor_list: false,
+            fx_editor_armed: false,
             picker_above: false,
             tuner: Tuner::new(),
             recorder: Recorder::new(),

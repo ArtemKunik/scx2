@@ -1,8 +1,8 @@
 //! The full effect-parameter editor: all 32 bytes of every effect block.
 //!
-//! The knobs drawn on the pedals are the fast path; this panel is the complete
-//! one. It also shows FUSE's real control names for the model, which is what
-//! makes a raw offset like 34 mean `Depth` instead of a mystery byte.
+//! The focused pedal editor is the fast path; this panel is the complete one.
+//! It also shows FUSE's real control names for the model, which is what makes
+//! a raw offset like 34 mean `Depth` instead of a mystery byte.
 
 use eframe::egui::{
     self, Align2, CursorIcon, FontId, Id, Pos2, Rect, Sense, Shape, Stroke, Ui, Vec2,
@@ -48,7 +48,7 @@ impl App {
         painter.text(
             rect.right_center(),
             Align2::RIGHT_CENTER,
-            "All 32 parameters · 0–10 · names from FUSE",
+            "All 32 bytes · 0–10 · names from FUSE",
             regular(11.5),
             TEXT_3,
         );

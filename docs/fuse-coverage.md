@@ -22,8 +22,8 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | Cabinet simulation | yes | FUSE's `Cab` at amp offset 49; choose it with the voice in the amp/speaker picker. |
 | Advanced amp controls | partial | Gain 2, Master, Presence, Resonance, gate, bias, sag and bright are there. **USB Gain** is not. |
 | USB Gain | missing | FUSE's SCX2 advanced panel has a USB GAIN knob. It lives in the `0x0D` misc block at offset 16. |
-| Effect model selection | yes | Stomp, modulation, delay and reverb slots. |
-| Effect parameters | yes | All 32 bytes per block, with FUSE names. |
+| Effect model selection | yes | Stomp, modulation, delay and reverb slots; click a slot for its focused editor. |
+| Effect parameters | yes | Big labelled controls per parameter, plus all 32 raw bytes with FUSE names. |
 | Effect bypass | yes | Verified `19 c3` frame; the model and settings stay loaded. |
 | Effect defaults / reset | yes | Loading a model writes its defaults; reset restores them. |
 | Signal-chain reordering | n/a | The SCX2 has four fixed, typed effect slots. FUSE's orderable-chain UI is for other products. |

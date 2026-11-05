@@ -6,7 +6,9 @@ here writes to the amp until step 6, and step 1 gives you a full backup.
 Prerequisites:
 
 * amp powered on, USB cable that carries data (not a charge-only cable)
-* Windows 11, Rust toolchain installed
+* Windows 11, or Linux (Ubuntu 24.04 is the reference target; see
+  [linux.md](linux.md))
+* Rust toolchain installed
 * Fender FUSE closed (it grabs the HID interface)
 
 Build once:
@@ -15,7 +17,8 @@ Build once:
 cargo build --release
 ```
 
-The binary is `target\release\scx2.exe`; below it is just called `scx2`.
+The binary is `target\release\scx2.exe` on Windows and `target/release/scx2`
+on Linux; below it is just called `scx2`.
 
 ## 1. Back up before touching anything
 

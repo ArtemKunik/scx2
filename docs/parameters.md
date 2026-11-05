@@ -152,12 +152,14 @@ and a dump shows `0` for on and `1` for bypassed.
 The full table lives in `src/models.rs` (`effect_params`), and it covers every
 model in the Mustang-wide list, not only the ones this capture happened to use.
 
-The editor makes these blocks editable: click an effect slot to choose a model
-(or clear it with `None`), drag the knobs drawn on the pedal, or open **Effect
-Parameters** for all 32 bytes. Loading a model gives it that model's default
-parameter bytes: FUSE's captured defaults where they are known, otherwise a
-neutral `0x80` in every slot the model uses. A model that is not in the default
-table therefore no longer inherits the previous effect's settings.
+The editor makes these blocks editable: click an effect slot to open that
+pedal's focused editor, choose a model (or clear it with `None`), and turn the
+large labelled knobs for the effect's parameters. Each control shows its FUSE
+name and its 0–10 value, and a drag or the wheel turns it; **Effect
+Parameters** still opens all 32 bytes. Loading a model gives it that model's
+default parameter bytes: FUSE's captured defaults where they are known,
+otherwise a neutral `0x80` in every slot the model uses. A model that is not in
+the default table therefore no longer inherits the previous effect's settings.
 
 Loading a model into a preset that does not carry that block creates a frame
 with the preset's bank/index and the observed default slot for the effect kind;

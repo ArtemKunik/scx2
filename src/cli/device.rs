@@ -21,7 +21,7 @@ pub(crate) fn scan(all: bool) -> Result<()> {
         #[cfg(target_os = "linux")]
         println!(
             "hint: Linux exposes HID devices as /dev/hidraw*; if none are listed, check the \
-             cable and install packaging/linux/99-scx2.rules"
+             cable and install packaging/udev/70-scx2.rules"
         );
         return Ok(());
     }
