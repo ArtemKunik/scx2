@@ -125,7 +125,46 @@ impl App {
                 {
                     self.begin_edit();
                     self.dump = self.original.clone();
+                    self.pending_live.clear();
                     self.status = "Changes reverted".into();
+                }
+                if tool_button(
+                    ui,
+                    if self.show_tuner {
+                        "Hide Tuner"
+                    } else {
+                        "Tuner"
+                    },
+                    true,
+                    ButtonKind::Plain,
+                )
+                .clicked()
+                {
+                    self.show_tuner = !self.show_tuner;
+                    if self.show_tuner {
+                        self.tuner.start(None);
+                    } else {
+                        self.tuner.stop();
+                        self.amp_job = None;
+                        self.amp_note = None;
+                    }
+                }
+                if tool_button(
+                    ui,
+                    if self.show_recorder {
+                        "Hide Recorder"
+                    } else {
+                        "Recorder"
+                    },
+                    true,
+                    ButtonKind::Plain,
+                )
+                .clicked()
+                {
+                    self.show_recorder = !self.show_recorder;
+                    if !self.show_recorder {
+                        self.recorder.stop();
+                    }
                 }
             });
         });

@@ -33,6 +33,39 @@ pub const AMP_MODELS: &[(u16, &str)] = &[
     (0x00eb, "Clean Channel"),
 ];
 
+/// Cabinets FUSE offers for the amp block, in the order the amp stores them
+/// at offset 49.
+///
+/// The ids and identities are FUSE's own cabinet enum
+/// (`eFXPARM_CABSIM_*` from FUSE 2.7.1). `0` is direct / no simulation, and
+/// the SCX2 firmware gives every voice one of these as its default cabinet.
+pub const CABINET_MODELS: &[(u8, &str)] = &[
+    (0, "Off (direct)"),
+    (1, "1x12 '57 Deluxe"),
+    (2, "4x10 '59 Bassman"),
+    (3, "1x12 '65 Deluxe"),
+    (4, "1x10 '65 Princeton"),
+    (5, "1x8 '57 Champ"),
+    (6, "4x12 JCM800"),
+    (7, "2x12 AC30"),
+    (8, "4x12 EVH"),
+    (9, "2x12 '65 Twin"),
+    (10, "4x12 Recto"),
+    (11, "2x12 Super-Sonic"),
+    (12, "1x12 Super-Sonic"),
+];
+
+/// Highest cabinet id FUSE writes for the amp block.
+pub const CABINET_MAX: u8 = 0x0c;
+
+/// The cabinet model stored at block offset 49, by FUSE's id.
+pub fn cabinet_name(id: u8) -> Option<&'static str> {
+    CABINET_MODELS
+        .iter()
+        .find(|(cabinet, _)| *cabinet == id)
+        .map(|(_, name)| *name)
+}
+
 pub const STOMP_MODELS: &[(u16, &str)] = &[
     (0x0000, "None"),
     (0x003c, "Overdrive"),
@@ -366,6 +399,9 @@ pub fn observed(kind: Kind, model: u16) -> bool {
         .any(|(entry_kind, entry_model)| *entry_kind == kind && *entry_model == model)
 }
 
+/// The highest voice index the SCX2 front panel can select.
+pub const VOICE_MAX: u8 = 0x0d;
+
 /// Amp model selected by a voice index (block offsets 44..46); 0 when unknown.
 pub fn voice_model_id(index: u8) -> u16 {
     match index {
@@ -389,5 +425,53 @@ pub fn voice_model_id(index: u8) -> u16 {
 
 /// The voice index (block offsets 44..46) that selects an amp model, if known.
 pub fn voice_index(model: u16) -> Option<u8> {
-    (0u8..=0x0d).find(|index| voice_model_id(*index) == model)
+    (0u8..=VOICE_MAX).find(|index| voice_model_id(*index) == model)
+}
+
+/// Every voice the SCX2 can select, in front-panel order.
+///
+/// These are the fourteen indices the firmware defines. The rest of
+/// `AMP_MODELS` are Mustang models this amp does not have.
+pub fn voices() -> impl Iterator<Item = (u8, u16, &'static str)> {
+    (0u8..=VOICE_MAX).map(|index| {
+        let model = voice_model_id(index);
+        let name = model_name(Kind::Amp, model).unwrap_or("Unknown");
+        (index, model, name)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_voice_has_a_name_and_an_index() {
+        let voices: Vec<_> = voices().collect();
+        assert_eq!(voices.len(), VOICE_MAX as usize + 1);
+        for (index, model, name) in voices {
+            assert_ne!(name, "Unknown", "voice {index} has no model name");
+            assert_eq!(voice_index(model), Some(index));
+        }
+    }
+
+    #[test]
+    fn voices_are_in_front_panel_order() {
+        assert_eq!(voice_model_id(0), 0x00eb);
+        assert_eq!(voice_model_id(0x03), 0x0053);
+        assert_eq!(model_name(Kind::Amp, 0x0053), Some("'65 Deluxe"));
+        assert_eq!(voice_model_id(VOICE_MAX), 0x00ea);
+    }
+
+    #[test]
+    fn fuses_cabinet_simulation_is_fully_covered() {
+        assert_eq!(CABINET_MODELS.len(), CABINET_MAX as usize + 1);
+        assert_eq!(cabinet_name(0), Some("Off (direct)"));
+        assert_eq!(cabinet_name(0x05), Some("1x8 '57 Champ"));
+        assert_eq!(cabinet_name(CABINET_MAX), Some("1x12 Super-Sonic"));
+        assert_eq!(cabinet_name(CABINET_MAX + 1), None);
+
+        for (id, name) in CABINET_MODELS {
+            assert_eq!(cabinet_name(*id), Some(*name));
+        }
+    }
 }

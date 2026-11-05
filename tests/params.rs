@@ -16,20 +16,49 @@ fn standard_knobs_match_fuse() {
 }
 
 #[test]
-fn hidden_knobs_are_documented_guesses() {
+fn hidden_knobs_have_names_and_honest_hints() {
     let hidden: Vec<_> = KNOBS.iter().filter(|spec| !spec.standard).collect();
     assert!(
         hidden.len() >= 8,
         "expected the probed extras to be offered"
     );
     for spec in hidden {
+        assert!(!spec.name.is_empty());
+        assert!(!spec.hint.is_empty(), "{} needs an explanation", spec.name);
+    }
+
+    // These still have no authoritative SCX2 description, so their hints must
+    // say so. Resonance and Gate depth are named by FUSE's own model table and
+    // no longer count as guesses.
+    for name in [
+        "Gain 2",
+        "Master",
+        "Presence",
+        "Bias",
+        "Gate threshold",
+        "Sag",
+        "Bright",
+    ] {
+        let spec = KNOBS
+            .iter()
+            .find(|spec| spec.name == name)
+            .unwrap_or_else(|| panic!("{name} is missing from the knob catalogue"));
         assert!(
             spec.hint.to_ascii_lowercase().contains("guess"),
-            "{} needs a hint that says it is a guess",
-            spec.name
+            "{name} needs a hint that says it is a guess"
         );
-        assert!(!spec.name.is_empty());
     }
+}
+
+#[test]
+fn the_cabinet_is_not_a_knob() {
+    // The speaker is chosen in the combined amp/speaker picker, next to the
+    // voice. It must not appear as another knob on the panel.
+    assert!(
+        KNOBS.iter().all(|spec| spec.offset != 49),
+        "the cabinet must stay out of the knob catalogue"
+    );
+    assert_eq!(params::index_for_offset(49), Some(0x11));
 }
 
 #[test]

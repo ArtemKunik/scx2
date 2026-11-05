@@ -7,17 +7,26 @@ license = "MIT"
 
 [features]
 default = ["ui"]
-ui = ["dep:eframe", "dep:rfd"]
+ui = ["dep:eframe", "dep:rfd", "tuner"]
+tuner = ["dep:cpal", "dep:windows", "dep:hound"]
 
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
+cpal = { version = "0.15.3", optional = true }
 eframe = { version = "0.27", optional = true }
 hidapi = "2"
+hound = { version = "3.5", optional = true }
 rfd = { version = "0.17", optional = true }
 roxmltree = "0.20"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+windows = { version = "0.54", optional = true, features = [
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Media_Audio",
+    "Win32_System_Com",
+    "Win32_UI_Shell_PropertiesSystem",
+] }
 
 [lib]
 name = "scx2"

@@ -39,6 +39,10 @@ can now read and write it.
 * Each `Param` is 16-bit and carries the same byte twice (`byte * 257`), which
   is exactly the value the amp's direct-control frame uses.
 * The `Amplifier` module has no voice field; the amp model id selects the voice.
+* FUSE's Super Champ X2 amp module defines 23 parameters (`ControlIndex`
+  `0`..`22`). `ControlIndex="17"` is `Cab`, the cabinet / speaker simulation
+  (0 = off, 1..12 = cabinets); `scx2` writes all 23 on export, so the selected
+  cabinet survives a round trip.
 
 ## Commands
 
@@ -63,9 +67,9 @@ writes the selected preset.
 * Models that FUSE did not give an id (Mono Echo Filter, Stereo Tape Delay,
   Multitap Delay, Ping Pong Delay) are exported with the DSP id as a fallback;
   FUSE may not recognize those files.
-* `.fuse` files do not carry the amp's raw reserved bytes. Import creates a
-  clean block from the model and parameters; export writes the model,
-  parameters, slot and bypass state.
+* `.fuse` files do not carry the amp's raw reserved bytes beyond FUSE's 23 amp
+  parameters. Import creates a clean block from the model and parameters;
+  export writes the model, those parameters, slot and bypass state.
 * To put a `.fuse` preset on the amp, import it (it lands in the live buffer),
   then use `scx2 store --bank <1|2> --index <n>`; the save frame is verified
   and survives a power cycle. See `docs/protocol.md`.

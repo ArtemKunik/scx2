@@ -52,8 +52,14 @@ pub(super) fn knob_widget(
     let voice = (44..=46).contains(&knob.offset);
     let range = if voice { 13.0 } else { 255.0 };
 
+    // Include the readout under the dial, so the model name is part of the
+    // same control (and can be clicked to pick a voice).
+    let hit = Rect::from_min_max(
+        center - Vec2::new(DIAL_R * 0.85, DIAL_R * 0.85),
+        center + Vec2::new(DIAL_R * 0.85, DIAL_R + 18.0),
+    );
     let response = ui.interact(
-        Rect::from_center_size(center, Vec2::splat(DIAL_R * 1.7)),
+        hit,
         id,
         if editable {
             Sense::click_and_drag()
@@ -81,7 +87,13 @@ pub(super) fn knob_widget(
         1.4,
     );
 
-    dial_scale(painter, center, voice, look.ink);
+    dial_scale(
+        painter,
+        center,
+        if voice { 14 } else { 11 },
+        !voice,
+        look.ink,
+    );
 
     let body = snapped(Rect::from_center_size(center, Vec2::splat(KNOB_D)), art.ppp);
     painter.image(
@@ -147,7 +159,12 @@ pub(super) fn knob_widget(
     let hint = params::knob_spec(knob.offset)
         .map(|spec| format!("{}\n", spec.hint))
         .unwrap_or_default();
-    let (cursor, how) = if editable {
+    let (cursor, how) = if editable && voice {
+        (
+            CursorIcon::PointingHand,
+            "Click to choose an amp voice and speaker. Drag to sweep. Hold Shift for fine control.",
+        )
+    } else if editable {
         (
             CursorIcon::ResizeVertical,
             "Drag to adjust. Hold Shift for fine control.",
@@ -158,11 +175,10 @@ pub(super) fn knob_widget(
             "Stored on the amp. Choose Live Buffer to turn this knob.",
         )
     };
-    response.on_hover_cursor(cursor).on_hover_text(format!(
-        "{}: {} / 10\n{hint}{how}",
-        knob.label,
-        scale10(*value),
-    ))
+    let value_text = format!("{} / 10", scale10(*value));
+    response
+        .on_hover_cursor(cursor)
+        .on_hover_text(format!("{}: {value_text}\n{hint}{how}", knob.label,))
 }
 
 /// A raw 0..255 parameter as the 0..10 scale shown on every knob and cell.
@@ -172,9 +188,8 @@ pub(super) fn scale10(value: u8) -> String {
     format!("{:.1}", value as f32 / 255.0 * 10.0)
 }
 
-/// Tick marks and numerals silk-screened on the panel around a knob.
-fn dial_scale(painter: &Painter, center: Pos2, voice: bool, ink: Color32) {
-    let positions = if voice { 14 } else { 11 };
+/// Tick marks and (for continuous controls) numerals silk-screened around a knob.
+fn dial_scale(painter: &Painter, center: Pos2, positions: usize, numbers: bool, ink: Color32) {
     let radius = KNOB_D / 2.0;
     let ink = ink.gamma_multiply(0.78);
     for tick in 0..positions {
@@ -185,7 +200,7 @@ fn dial_scale(painter: &Painter, center: Pos2, voice: bool, ink: Color32) {
             [center + dir * (radius + 2.5), center + dir * (radius + 6.0)],
             stroke(1.0, ink),
         );
-        if !voice {
+        if numbers {
             painter.text(
                 center + dir * (radius + 12.5),
                 Align2::CENTER_CENTER,

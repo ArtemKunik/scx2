@@ -103,7 +103,18 @@ impl App {
 
         // The grille takes the room that is left, and yields when the
         // parameters open. Cloth is the one thing here that can give way.
-        let fixed = panel_h + 2.0 * CABINET_PAD + 14.0 + 18.0 + PEDAL_H + 14.0 + 28.0 + 8.0;
+        let tuner_h = if self.show_tuner { 244.0 } else { 0.0 };
+        let recorder_h = if self.show_recorder { 156.0 } else { 0.0 };
+        let fixed = panel_h
+            + 2.0 * CABINET_PAD
+            + 14.0
+            + 18.0
+            + PEDAL_H
+            + 14.0
+            + tuner_h
+            + recorder_h
+            + 28.0
+            + 8.0;
         let target = if self.show_params || self.show_fx_params {
             GRILLE_MIN
         } else {
@@ -126,6 +137,14 @@ impl App {
                         self.amp(ui, art, &preset, width, panel_h, grille_h);
                         ui.add_space(18.0);
                         self.pedals(ui, art, &preset, width);
+                        if self.show_tuner {
+                            ui.add_space(14.0);
+                            self.tuner_panel(ui, width);
+                        }
+                        if self.show_recorder {
+                            ui.add_space(14.0);
+                            self.recorder_panel(ui, width);
+                        }
                         ui.add_space(14.0);
                         self.effect_parameters(ui, &preset, width);
                         ui.add_space(8.0);
