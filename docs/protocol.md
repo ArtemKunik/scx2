@@ -267,10 +267,26 @@ both `scx2 store --name` and a direct `0x04` name block.
 
 ## Recording your own capture
 
-1. Install [USBPcap](https://desowin.org/usbpcap/) (it comes with Wireshark).
-2. Start a capture on the root hub the amp is attached to.
-3. Open FUSE, connect, change one thing, save, quit.
-4. Stop the capture and keep the `.pcap`.
+On Windows, with [USBPcap](https://desowin.org/usbpcap/) (it comes with
+Wireshark):
 
-Then `scx2 replay your-capture.pcap` decodes the amp's side offline, and
-`scx2 replay --json` gives you the raw bytes for diffing two captures.
+1. Start a capture on the root hub the amp is attached to.
+2. Open FUSE, connect, change one thing, save, quit.
+3. Stop the capture and keep the `.pcap`.
+
+On Linux, with `usbmon`:
+
+```console
+sudo modprobe usbmon
+lsusb -d 1ed8:000e                 # note the bus, e.g. "Bus 001"
+sudo tshark -D                     # pick the matching usbmonN
+sudo tshark -i usbmon1 -w scx2-linux.pcap
+```
+
+Turn a knob or run `scx2 monitor` while it records, then stop with Ctrl-C.
+Keep it short: `usbmon` records every transfer on the bus.
+
+Both formats replay: link type 249 (USBPcap) and link type 220 (Linux
+`usbmon` mmapped). `scx2 replay your-capture.pcap` decodes the amp's side
+offline, and `scx2 replay --json` gives you the raw bytes for diffing two
+captures.

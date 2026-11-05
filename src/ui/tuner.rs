@@ -111,7 +111,8 @@ impl App {
                             );
                         }
                     });
-                if status == Status::Running
+                if cfg!(windows)
+                    && status == Status::Running
                     && !using_amp
                     && ui
                         .small_button("Enable amp input")

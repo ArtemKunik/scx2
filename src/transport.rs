@@ -17,6 +17,13 @@ pub struct DeviceSummary {
     pub path: String,
     pub vendor_id: u16,
     pub product_id: u16,
+    /// HID interface number. Linux exposes one hidraw node per interface, so
+    /// a composite device can appear more than once.
+    pub interface_number: i32,
+    /// HID usage page and usage; the vendor collection is the one that
+    /// carries the preset reports.
+    pub usage_page: u16,
+    pub usage: u16,
     pub product: Option<String>,
     pub manufacturer: Option<String>,
     pub serial: Option<String>,
@@ -47,6 +54,9 @@ pub fn scan(fender_only: bool) -> Result<Vec<DeviceSummary>> {
             path: d.path().to_string_lossy().into_owned(),
             vendor_id: d.vendor_id(),
             product_id: d.product_id(),
+            interface_number: d.interface_number(),
+            usage_page: d.usage_page(),
+            usage: d.usage(),
             product: d.product_string().map(str::to_string),
             manufacturer: d.manufacturer_string().map(str::to_string),
             serial: d.serial_number().map(str::to_string),
@@ -64,16 +74,39 @@ fn open_device(path: Option<&str>) -> Result<HidDevice> {
             api.open_path(&c_path)
                 .with_context(|| format!("opening HID device {path}"))?
         }
-        None => api.open(VENDOR_ID, PRODUCT_ID).map_err(|error| {
-            anyhow!(
-                "could not open the amp [{VENDOR_ID:04x}:{PRODUCT_ID:04x}]: {error}\n\
-                 - is the amp powered on and connected with a data cable?\n\
-                 - close Fender FUSE or anything else holding the device\n\
-                 - `scx2 scan --all` shows what Windows can see"
-            )
-        })?,
+        None => {
+            // A composite device can expose more than one HID collection, and
+            // some systems list the vendor node after a consumer-control one.
+            // Open the vendor-defined usage page explicitly when it is known,
+            // then fall back to the plain VID/PID lookup used on Windows.
+            match open_vendor_interface(&api) {
+                Some(device) => device,
+                None => api.open(VENDOR_ID, PRODUCT_ID).map_err(|error| {
+                    anyhow!(
+                        "could not open the amp [{VENDOR_ID:04x}:{PRODUCT_ID:04x}]: {error}\n\
+                         - is the amp powered on and connected with a data cable?\n\
+                         - close Fender FUSE or anything else holding the device\n\
+                         - `scx2 scan --all` lists every HID device the system can see"
+                    )
+                })?,
+            }
+        }
     };
     Ok(device)
+}
+
+/// The amp's vendor-defined HID collection, if the platform reports one.
+///
+/// Windows usually exposes a single interface, so the fallback keeps the
+/// historical behaviour. Linux can expose several hidraw nodes for the same
+/// device; preferring `usage_page >= 0xff00` picks the one that carries the
+/// 64-byte preset reports.
+fn open_vendor_interface(api: &HidApi) -> Option<HidDevice> {
+    api.device_list()
+        .filter(|info| info.vendor_id() == VENDOR_ID && info.product_id() == PRODUCT_ID)
+        .filter(|info| info.usage_page() >= 0xff00)
+        .min_by_key(|info| info.interface_number())
+        .and_then(|info| api.open_path(info.path()).ok())
 }
 
 /// An open amp connection.
