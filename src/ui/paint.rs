@@ -31,13 +31,15 @@ pub(super) fn screw(painter: &Painter, center: Pos2) {
     );
 }
 
+/// Paint the grille cloth and its model plate, returning the plate's rectangle
+/// so the caller can make it a control.
 pub(super) fn paint_grille(
     painter: &Painter,
     art: &Art,
     look: &Look,
     grille: Rect,
     model_name: &str,
-) {
+) -> Rect {
     let surface = art.surface(look.era);
     painter.rect_filled(grille.expand(3.0), 6.0, Color32::from_rgb(7, 7, 7));
     painter.rect_filled(grille.expand(1.5), 5.0, look.piping.gamma_multiply(0.55));
@@ -112,6 +114,7 @@ pub(super) fn paint_grille(
         Color32::from_rgb(72, 68, 62),
         0.8,
     );
+    plate
 }
 
 pub(super) fn full_uv() -> Rect {

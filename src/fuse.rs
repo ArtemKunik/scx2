@@ -30,6 +30,13 @@ use crate::protocol::{
     REPORT_SIZE,
 };
 
+/// How many parameters FUSE's Super Champ X2 amp module defines.
+///
+/// `ControlIndex` 17 is the cabinet (speaker simulation) at block offset 49.
+/// Exporting only the eight front-panel values used to drop it, along with the
+/// gate, bias, sag and the other advanced parameters.
+const AMP_PARAM_COUNT: usize = 23;
+
 /// Parse a `.fuse` XML document into a preset in the live buffer.
 ///
 /// Importing into the live buffer matches what FUSE does when you open a
@@ -87,7 +94,7 @@ pub fn export(preset: &Preset) -> Result<String> {
         out.push_str(&format!(
             "    <Module ID=\"{id}\" POS=\"0\" BypassState=\"0\">\n"
         ));
-        for index in 0..8 {
+        for index in 0..AMP_PARAM_COUNT {
             let value = u32::from(amp.byte(OFF_PARAMS + index)) * 257;
             out.push_str(&format!(
                 "      <Param ControlIndex=\"{index}\">{value}</Param>\n"

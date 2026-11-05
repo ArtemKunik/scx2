@@ -24,16 +24,43 @@ matches the amp's front panel. The byte sent to the amp is unchanged.
 | `0x05` | 37 | Middle | no, FUSE only | tone stack, set per voice |
 | `0x06` | 38 | Bass | yes | tone stack |
 | `0x07` | 39 | Presence | no | power-amp feedback |
-| `0x08` | 40 | Amp 8 | no | undocumented; writes cleanly |
-| `0x09` | 41 + 47 | Gate depth | no | also moves the gate pair |
+| `0x08` | 40 | Resonance | no | FUSE names this Resonance; writes cleanly |
+| `0x09` | 41 + 47 | Noise gate depth | no | FUSE's `NG Depth`; also moves the gate pair |
 | `0x0a` | 42 | Bias | no | power-amp bias |
 | `0x0f` | 41, 47, 48 | Noise gate | no | gate on/off plus threshold |
-| `0x10` | 47, 48 | Gate threshold | no | 16-bit pair, big endian |
-| `0x11` | 49 | Cabinet | no | speaker/cab model |
+| `0x10` | 47, 48 | Noise gate threshold | no | 16-bit pair, big endian |
+| `0x11` | 49 | Cabinet | no | FUSE's speaker simulation: 0 = off, 1..12 = cabinets |
 | `0x13` | 51 | Sag | no | supply sag |
 | `0x14` | 52 | Bright | no | inverted: low = bright on |
 
-Indices `0x0b`..`0x0e` produced no change on the SCX2, so they are not offered.
+Indices `0x0b`..`0x0e` have no separate direct-control behaviour on the SCX2;
+`0x0c`..`0x0e` are the voice bytes at offsets 44..46 and are written as a
+block. FUSE's Super Champ X2 model table numbers the first eight as Volume,
+Gain, Gain2, Master, Treble, Middle, Bass and Presence; its "Resonance",
+"NG Depth" and "Cab" are the same parameters measured here as `0x08`, `0x09`
+and `0x11`.
+
+## Cabinet simulation (offset 49)
+
+FUSE's amp editor exposes a **Cabinet** dropdown for every SCX2 voice. The
+value is FUSE's cabinet id and lives at offset 49 (`ControlIndex="17"`).
+`0` turns the speaker simulation off (direct); `1`..`12` select a cabinet.
+The firmware stores a default cabinet for each voice.
+
+| Id | Cabinet | Id | Cabinet |
+| --- | --- | --- | --- |
+| `0x00` | Off (direct) | `0x07` | 2x12 AC30 |
+| `0x01` | 1x12 '57 Deluxe | `0x08` | 4x12 EVH |
+| `0x02` | 4x10 '59 Bassman | `0x09` | 2x12 '65 Twin |
+| `0x03` | 1x12 '65 Deluxe | `0x0a` | 4x12 Recto |
+| `0x04` | 1x10 '65 Princeton | `0x0b` | 2x12 Super-Sonic |
+| `0x05` | 1x8 '57 Champ | `0x0c` | 1x12 Super-Sonic |
+| `0x06` | 4x12 JCM800 | | |
+
+The ids and identities come from FUSE's own cabinet enum
+(`eFXPARM_CABSIM_*` in `FUSEUI.dll`), not from a guess. The editor writes this
+parameter through direct control index `0x11`, and `.fuse` export keeps it so
+a saved preset does not lose its speaker simulation.
 
 `44..46` holds the voice index (same value three times) and is written with a
 normal block write, not direct control. `47`/`48` behave as one 16-bit gate
@@ -48,13 +75,21 @@ parameter names in `docs/reference/amp.h`:
 - **Gain 2** - second gain stage, used by the Supersonic-style voices.
 - **Master** - output-stage level; the SCX2 has no master knob.
 - **Presence** - tone control the SCX2 panel omits.
-- **Amp 8** - no Mustang equivalent; possibly a resonance/presence trim.
-- **Gate depth**, **Gate threshold** - noise gate.
+- **Resonance** - FUSE's name for the parameter at offset 40; likely a
+  low-end/resonance trim.
+- **Noise gate depth**, **Noise gate threshold** - the noise gate; FUSE calls
+  them `NG Depth` and `NG Thresh`.
 - **Bias**, **Sag**, **Bright** - power-amp behaviour.
-- **Cabinet** - speaker cabinet model.
 
-Treat them as experiments: changing one is safe (the amp restores the value on
-preset recall) but the name may not match what you hear.
+The **Cabinet** parameter is not a knob: the combined amp/speaker picker (the
+grille name plate or the Voice knob) chooses the voice and the cabinet together,
+with a head-and-cab preview. See the section above.
+
+The hints marked *Guessed* are still inferences about what the SCX2 does
+(Gain 2, Master, Presence, Bias, Gate threshold, Sag and Bright). The rest,
+including Resonance, Noise gate depth and Cabinet, use FUSE's own names.
+Changing one is safe (the amp restores the value on preset recall), but the
+name may still not match what you hear.
 
 ## Voice index (offsets 44..46)
 

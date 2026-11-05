@@ -11,6 +11,8 @@ use eframe::CreationContext;
 
 use crate::capture;
 use crate::protocol::{Dump, BANK_AMP, BANK_FX, BANK_LIVE};
+use crate::recorder::Recorder;
+use crate::tuner::Tuner;
 
 use super::art::Art;
 use super::sync::Activity;
@@ -24,6 +26,16 @@ use super::{theme, DEMO_CAPTURE};
 pub(crate) struct Knob {
     pub(crate) offset: usize,
     pub(crate) label: String,
+}
+
+/// A live-buffer byte the person changed that the amp has not echoed yet.
+///
+/// A dump can overtake a write, so its copy of the live buffer may be older
+/// than what is on screen. Keep the local value until the amp reports it back
+/// (or until it is old enough that the write must have been ignored).
+pub(crate) struct PendingLive {
+    pub(crate) value: u8,
+    pub(crate) seen: Instant,
 }
 
 pub struct App {
@@ -48,10 +60,22 @@ pub struct App {
     pub(crate) connecting: bool,
     pub(crate) show_params: bool,
     pub(crate) show_fx_params: bool,
+    pub(crate) show_tuner: bool,
+    pub(crate) show_recorder: bool,
+    /// Whether the amp/speaker picker prefers to open above the grille plate.
+    pub(crate) picker_above: bool,
+    pub(crate) tuner: Tuner,
+    pub(crate) recorder: Recorder,
+    /// A running attempt to switch the amp's USB input on.
+    pub(crate) amp_job: Option<crate::endpoint::EnableJob>,
+    /// What the last attempt reported, shown under the tuner header.
+    pub(crate) amp_note: Option<String>,
     pub(crate) art: Option<Rc<Art>>,
     /// Undo/redo snapshots of the whole dump.
     pub(crate) history: Vec<Dump>,
     pub(crate) future: Vec<Dump>,
+    /// Live buffer edits waiting for the amp to echo them back.
+    pub(crate) pending_live: BTreeMap<(u8, usize), PendingLive>,
     /// Consecutive edits inside this window become one undo step.
     pub(crate) last_edit: Option<Instant>,
     /// The file last opened or saved, if any.
@@ -111,9 +135,17 @@ impl App {
             connecting: false,
             show_params: false,
             show_fx_params: false,
+            show_tuner: false,
+            show_recorder: false,
+            picker_above: false,
+            tuner: Tuner::new(),
+            recorder: Recorder::new(),
+            amp_job: None,
+            amp_note: None,
             art: None,
             history: Vec::new(),
             future: Vec::new(),
+            pending_live: BTreeMap::new(),
             last_edit: None,
             path: None,
         };
@@ -137,6 +169,7 @@ impl App {
                 self.path = None;
                 self.history.clear();
                 self.future.clear();
+                self.pending_live.clear();
                 self.last_edit = None;
                 self.pick_default_preset();
             }
@@ -166,6 +199,7 @@ impl App {
                 self.path = Some(path.to_path_buf());
                 self.history.clear();
                 self.future.clear();
+                self.pending_live.clear();
                 self.last_edit = None;
                 self.status = format!("Opened {}", path.display());
                 self.pick_default_preset();
@@ -200,6 +234,7 @@ impl App {
         self.rx = Some(ev_rx);
         self.connecting = true;
         self.synced = false;
+        self.pending_live.clear();
         self.error = None;
         self.status = "Connecting…".into();
     }

@@ -86,6 +86,41 @@ fn a_parsed_preset_exports_back_to_fuse_xml() {
 }
 
 #[test]
+fn the_cabinet_speaker_simulation_survives_a_round_trip() {
+    let xml = r#"<?xml version="1.0"?>
+<Preset name="Cab">
+  <Amplifier>
+    <Module ID="3" POS="0" BypassState="0">
+      <Param ControlIndex="0">43690</Param>
+      <Param ControlIndex="17">2313</Param>
+    </Module>
+  </Amplifier>
+  <FX><Stompbox /><Modulation /><Delay /><Reverb /></FX>
+</Preset>"#;
+    let preset = fuse::parse(xml).expect("parse");
+    assert_eq!(
+        preset.block(Kind::Amp).unwrap().byte(49),
+        9,
+        "FUSE's Cab ControlIndex 17 is block offset 49"
+    );
+
+    let out = fuse::export(&preset).expect("export");
+    assert!(
+        out.contains("<Param ControlIndex=\"17\">2313</Param>"),
+        "cabinet missing from export:\n{out}"
+    );
+    for index in 0..23 {
+        assert!(
+            out.contains(&format!("<Param ControlIndex=\"{index}\">")),
+            "amp parameter {index} missing from export"
+        );
+    }
+
+    let again = fuse::parse(&out).expect("reparse");
+    assert_eq!(again.block(Kind::Amp).unwrap().byte(49), 9);
+}
+
+#[test]
 fn an_empty_effect_group_is_kept_empty() {
     let xml = r#"<?xml version="1.0"?>
 <Preset name="Amp only">

@@ -1,7 +1,8 @@
 //! The amp itself: cabinet, control panel, pilot jewel and grille.
 
 use eframe::egui::{
-    epaint::Shadow, Align2, Color32, Id, Painter, Pos2, Rect, Rounding, Sense, Shape, Ui, Vec2,
+    self, epaint::Shadow, Align2, Color32, CursorIcon, Id, Painter, Pos2, Rect, Rounding, Sense,
+    Shape, Ui, Vec2,
 };
 
 use super::ampstyle::{self, Look};
@@ -10,6 +11,7 @@ use super::art::{Art, JEWEL_D};
 use super::dial::{can_add, knob_widget, remove_button, Setting, DIAL_R};
 use super::knobs::remove_knob;
 use super::paint::{full_uv, paint_grille, screw, snapped, spaced, tile, vertical_gradient};
+use super::rig;
 use super::theme::*;
 use super::App;
 use crate::models;
@@ -141,6 +143,9 @@ impl App {
         };
 
         let mut remove = None;
+        let mut picker_open = false;
+        let mut knob_anchor: Option<(egui::Response, egui::AboveOrBelow)> = None;
+        let mut plate_anchor: Option<(egui::Response, egui::AboveOrBelow)> = None;
         let knobs = self.knobs.clone();
         let mut placed = 0;
         for knob in &knobs {
@@ -164,6 +169,15 @@ impl App {
             );
             if response.dragged() {
                 self.active_offset = Some(knob.offset);
+            }
+            // The voice knob doubles as a picker: a plain click opens the
+            // amp and speaker chooser, a drag still sweeps through the voices.
+            if knob.offset == 44 && editable {
+                if response.clicked() {
+                    picker_open = true;
+                    self.picker_above = false;
+                }
+                knob_anchor = Some((response.clone(), egui::AboveOrBelow::Below));
             }
             response.context_menu(|ui| {
                 if ui.button("Remove from Panel").clicked() {
@@ -189,9 +203,176 @@ impl App {
             Pos2::new(panel.left(), panel.bottom() + 14.0),
             Vec2::new(panel.width(), grille_h),
         );
-        paint_grille(&painter, art, &look, grille, name);
+        let plate = paint_grille(&painter, art, &look, grille, name);
+
+        // The badge on the cloth is the amp's name, so it is also the place to
+        // change it.
+        let plate = ui.interact(
+            plate,
+            Id::new("amp-voice"),
+            if editable {
+                Sense::click()
+            } else {
+                Sense::hover()
+            },
+        );
+        if editable {
+            let plate = plate
+                .on_hover_cursor(CursorIcon::PointingHand)
+                .on_hover_text(format!("{name}\nClick to choose an amp voice and speaker."));
+            // A small caret says the plate opens a list.
+            let ink = Color32::from_rgb(28, 26, 24);
+            let tip = Pos2::new(plate.rect.right() - 14.0, plate.rect.center().y);
+            painter.line_segment(
+                [tip + Vec2::new(-3.5, -1.5), tip + Vec2::new(0.0, 1.5)],
+                stroke(1.2, ink),
+            );
+            painter.line_segment(
+                [tip + Vec2::new(0.0, 1.5), tip + Vec2::new(3.5, -1.5)],
+                stroke(1.2, ink),
+            );
+            if plate.hovered() {
+                painter.rect_stroke(plate.rect, 3.0, stroke(1.0, AMBER.gamma_multiply(0.75)));
+            }
+            if plate.clicked() {
+                picker_open = true;
+                self.picker_above = true;
+            }
+            plate_anchor = Some((plate.clone(), egui::AboveOrBelow::Above));
+        } else {
+            plate.on_hover_text(format!(
+                "{name} — choose the Live Buffer to change the voice."
+            ));
+        }
+
+        let anchor = if self.picker_above {
+            plate_anchor.as_ref()
+        } else {
+            knob_anchor.as_ref()
+        };
+        let popup = Id::new("amp-picker");
+        // Dim and block the editor while the chooser is open. Without this, a
+        // click on the popup's edge could reach the effect slot underneath.
+        if ui.memory(|memory| memory.is_popup_open(popup)) {
+            let screen = ui.ctx().screen_rect();
+            let backdrop = egui::Area::new(Id::new("amp-picker-backdrop"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(screen.min)
+                .show(ui.ctx(), |ui| {
+                    let response = ui.allocate_rect(screen, Sense::click_and_drag());
+                    ui.painter()
+                        .rect_filled(screen, 0.0, Color32::from_black_alpha(92));
+                    response.clicked()
+                });
+            if backdrop.inner {
+                ui.memory_mut(|memory| memory.close_popup());
+            }
+        }
+        if let Some((anchor, placement)) = anchor {
+            if picker_open {
+                ui.memory_mut(|memory| memory.toggle_popup(popup));
+            }
+            let mut keep_open = false;
+            egui::popup_above_or_below_widget(ui, popup, anchor, *placement, |ui| {
+                ui.set_min_width(430.0);
+                ui.set_max_width(470.0);
+                ui.spacing_mut().item_spacing.y = 6.0;
+
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("AMP & SPEAKER")
+                            .font(semibold(11.0))
+                            .color(TEXT_3),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Done").clicked() {
+                            ui.close_menu();
+                        }
+                    });
+                });
+
+                // The picture is the selection: the head wears the voice's era
+                // finish and the cab shows the speakers the id stands for.
+                let (picture, _) = ui.allocate_exact_size(
+                    Vec2::new(ui.available_width(), rig::RIG_H),
+                    Sense::hover(),
+                );
+                rig::draw(&ui.painter_at(picture), picture, art, frame[44], frame[49]);
+
+                ui.columns(2, |columns| {
+                    columns[0].label(
+                        egui::RichText::new("AMP VOICE")
+                            .font(semibold(10.0))
+                            .color(TEXT_3),
+                    );
+                    egui::ScrollArea::vertical()
+                        .id_source("amp-picker-voices")
+                        .max_height(180.0)
+                        .auto_shrink([false, true])
+                        .show(&mut columns[0], |ui| {
+                            ui.set_min_width(190.0);
+                            ui.spacing_mut().item_spacing.y = 1.0;
+                            for (index, _, voice) in models::voices() {
+                                let item = ui.selectable_label(index == frame[44], voice);
+                                if index == frame[44] && picker_open {
+                                    item.scroll_to_me(Some(egui::Align::Center));
+                                }
+                                if item.clicked() {
+                                    frame[44] = index;
+                                    keep_open = true;
+                                    ui.ctx().request_repaint();
+                                }
+                            }
+                        });
+
+                    columns[1].label(
+                        egui::RichText::new("SPEAKER")
+                            .font(semibold(10.0))
+                            .color(TEXT_3),
+                    );
+                    egui::ScrollArea::vertical()
+                        .id_source("amp-picker-cabinets")
+                        .max_height(180.0)
+                        .auto_shrink([false, true])
+                        .show(&mut columns[1], |ui| {
+                            ui.set_min_width(190.0);
+                            ui.spacing_mut().item_spacing.y = 1.0;
+                            for (id, name) in models::CABINET_MODELS {
+                                let item = ui.selectable_label(*id == frame[49], *name);
+                                if *id == frame[49] && picker_open {
+                                    item.scroll_to_me(Some(egui::Align::Center));
+                                }
+                                if item.clicked() {
+                                    frame[49] = *id;
+                                    keep_open = true;
+                                    ui.ctx().request_repaint();
+                                }
+                            }
+                        });
+                });
+            });
+            // A pick closes the popup by way of the anchor's "clicked
+            // elsewhere", but this chooser is for two things at once: keep it
+            // open so a voice and a speaker can be picked in one visit.
+            if keep_open {
+                ui.memory_mut(|memory| memory.open_popup(popup));
+            }
+        }
 
         self.commit(&frame, &before);
+        if frame[44] != before[44] {
+            self.status = format!(
+                "Voice: {}",
+                models::model_name(Kind::Amp, models::voice_model_id(frame[44]))
+                    .unwrap_or("Unknown")
+            );
+        }
+        if frame[49] != before[49] {
+            self.status = format!(
+                "Speaker: {}",
+                models::cabinet_name(frame[49]).unwrap_or("custom setting")
+            );
+        }
     }
 
     /// Apply whatever the widgets changed in this frame's copy of the block.

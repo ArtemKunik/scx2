@@ -36,6 +36,12 @@ pub(crate) enum Cmd {
         code: u8,
         frame: [u8; protocol::REPORT_SIZE],
     },
+    /// FUSE's fast bypass frame; keeps the model and its settings.
+    Bypass {
+        kind: Kind,
+        slot: u8,
+        bypassed: bool,
+    },
 }
 
 pub(crate) enum Ev {
@@ -88,9 +94,14 @@ struct Collecting {
 fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
     let mut params_out: BTreeMap<u8, (u16, u8)> = BTreeMap::new();
     let mut blocks_out = BTreeMap::new();
+    let mut bypasses_out = BTreeMap::new();
     let mut awaiting_ack: Option<Instant> = None;
     let mut last_block = Instant::now() - BLOCK_GAP;
     let mut last_activity = Instant::now() - QUIET;
+    // Our own block/bypass write can make the amp announce a state change.
+    // Do not answer that with a dump; the live buffer on screen is already
+    // newer than the copy the amp would send back.
+    let mut quiet_until = Instant::now() - QUIET;
     let mut collecting: Option<Collecting> = None;
     let mut dump_soon = Some(Instant::now());
     let mut next_resync = Instant::now() + RESYNC;
@@ -107,6 +118,13 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                 }
                 Ok(Cmd::Block { code, frame }) => {
                     blocks_out.insert(code, frame);
+                }
+                Ok(Cmd::Bypass {
+                    kind,
+                    slot,
+                    bypassed,
+                }) => {
+                    bypasses_out.insert(kind.code(), (kind, slot, bypassed));
                 }
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => return Ok(()),
@@ -135,13 +153,21 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                     dump.newer.insert(offset, value);
                 }
             } else if now - last_block >= BLOCK_GAP {
-                if let Some((_, frame)) = blocks_out.pop_first() {
+                if let Some((_, (kind, slot, bypassed))) = bypasses_out.pop_first() {
+                    amp.write_report(&protocol::bypass(kind, slot, bypassed))?;
+                    last_block = now;
+                    last_activity = now;
+                    quiet_until = now + Duration::from_secs(1);
+                    if let Some(dump) = collecting.as_mut() {
+                        dump.stale = true;
+                    }
+                } else if let Some((_, frame)) = blocks_out.pop_first() {
                     amp.write_report(&frame)?;
                     // The amp buffers a block write until the execute frame.
                     amp.write_report(&protocol::execute_model_change())?;
                     last_block = now;
                     last_activity = now;
-                    dump_soon = Some(now + SOON);
+                    quiet_until = now + Duration::from_secs(1);
                     if let Some(dump) = collecting.as_mut() {
                         dump.stale = true;
                     }
@@ -149,7 +175,10 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
             }
         }
 
-        let busy = awaiting_ack.is_some() || !params_out.is_empty() || !blocks_out.is_empty();
+        let busy = awaiting_ack.is_some()
+            || !params_out.is_empty()
+            || !blocks_out.is_empty()
+            || !bypasses_out.is_empty();
         if let Some(report) = amp.read_report(if busy { 2 } else { 15 })? {
             let now = Instant::now();
             match protocol::classify(&report) {
@@ -170,8 +199,9 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                         )));
                     }
                 }
-                // Dumps end with these same reports, so only react between dumps.
-                Some(Notice::StateChanged) if collecting.is_none() => {
+                // Dumps end with these same reports, so only react between
+                // dumps. Ignore the announcement that our own write causes.
+                Some(Notice::StateChanged) if collecting.is_none() && now >= quiet_until => {
                     dump_soon = Some(now + SOON);
                 }
                 _ => {}
@@ -209,7 +239,10 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
             collecting = None;
             dump_soon = Some(now + SOON);
         }
-        let idle = awaiting_ack.is_none() && params_out.is_empty() && blocks_out.is_empty();
+        let idle = awaiting_ack.is_none()
+            && params_out.is_empty()
+            && blocks_out.is_empty()
+            && bypasses_out.is_empty();
         let asked = dump_soon.is_some_and(|at| now >= at);
         let routine = now >= next_resync && now - last_activity >= QUIET;
         if collecting.is_none() && idle && (asked || routine) {

@@ -37,6 +37,7 @@ impl App {
         ];
         let mut loads = Vec::new();
         let mut edits = Vec::new();
+        let mut toggles = Vec::new();
 
         for (index, (kind, title)) in chain.into_iter().enumerate() {
             let slot = Rect::from_min_size(
@@ -54,6 +55,7 @@ impl App {
             let block = preset.block(kind);
             let model = block.and_then(|message| message.model()).unwrap_or(0);
             let loaded = model != 0;
+            let bypassed = block.is_some_and(|message| message.byte(protocol::OFF_BYPASS) != 0);
             let name = if loaded {
                 models::model_name(kind, model).unwrap_or("Unknown")
             } else {
@@ -73,11 +75,55 @@ impl App {
                 1.7,
             );
             let dot = slot.right_top() + Vec2::new(-10.0, 10.0);
-            if loaded {
+            if loaded && !bypassed {
                 painter.circle_filled(dot, 6.0, AMBER.gamma_multiply(0.16));
                 painter.circle_filled(dot, 2.8, AMBER);
             } else {
                 painter.circle_filled(dot, 2.4, RAISED);
+            }
+
+            // A loaded effect can be switched off without unloading it, so its
+            // model and settings stay exactly where they are.
+            let mut power_clicked = false;
+            if loaded && editable {
+                let pill = Rect::from_center_size(
+                    slot.right_top() + Vec2::new(-36.0, 10.0),
+                    Vec2::new(42.0, 17.0),
+                );
+                let response = ui
+                    .interact(pill, Id::new(("fx-power", kind.label())), Sense::click())
+                    .on_hover_cursor(CursorIcon::PointingHand)
+                    .on_hover_text(if bypassed {
+                        "Switch this effect on. Its settings are kept."
+                    } else {
+                        "Switch this effect off. Its settings are kept."
+                    });
+                let (fill, hover, ink) = if bypassed {
+                    (
+                        Color32::from_white_alpha(10),
+                        Color32::from_white_alpha(22),
+                        TEXT_3,
+                    )
+                } else {
+                    (
+                        AMBER.gamma_multiply(0.18),
+                        AMBER.gamma_multiply(0.28),
+                        AMBER,
+                    )
+                };
+                painter.rect_filled(pill, 8.0, if response.hovered() { hover } else { fill });
+                painter.rect_stroke(pill, 8.0, stroke(1.0, ink.gamma_multiply(0.45)));
+                painter.text(
+                    pill.center(),
+                    Align2::CENTER_CENTER,
+                    if bypassed { "OFF" } else { "ON" },
+                    semibold(8.5),
+                    ink,
+                );
+                if response.clicked() {
+                    power_clicked = true;
+                    toggles.push((kind, u8::from(!bypassed)));
+                }
             }
 
             // Keep a frame per slot so a drag only touches this block, and the
@@ -98,6 +144,9 @@ impl App {
                     Vec::new()
                 }
             };
+            if loaded && bypassed {
+                painter.rect_filled(area.shrink(4.0), 10.0, Color32::from_black_alpha(90));
+            }
 
             let params = look.as_ref().map(|look| look.params()).unwrap_or_default();
             let baseline = self.effect_baseline(preset, kind);
@@ -211,7 +260,7 @@ impl App {
                 }
             }
 
-            if response.clicked() && editable && !knob_hovered && !remove {
+            if response.clicked() && editable && !knob_hovered && !remove && !power_clicked {
                 ui.memory_mut(|memory| memory.toggle_popup(popup));
             }
 
@@ -225,7 +274,8 @@ impl App {
                 } else {
                     "Choose the Live Buffer to edit effects."
                 };
-                format!("{name} — {title}{slot_text}\n{action}")
+                let state = if bypassed { " · off" } else { "" };
+                format!("{name} — {title}{slot_text}{state}\n{action}")
             } else if editable {
                 format!("{title}: click to load an effect")
             } else {
@@ -301,6 +351,9 @@ impl App {
 
         for (kind, model) in loads {
             self.set_effect_model(kind, model);
+        }
+        for (kind, value) in toggles {
+            self.apply_edit(kind, protocol::OFF_BYPASS, value);
         }
         for (kind, before, after) in edits {
             self.apply_effect(

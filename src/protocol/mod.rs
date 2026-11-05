@@ -45,6 +45,7 @@ pub const HOST_CONTROL: u8 = 0xC3;
 
 pub const OFF_MODEL: usize = 16;
 pub const OFF_SLOT: usize = 18;
+pub const OFF_BYPASS: usize = 22;
 pub const OFF_NAME: usize = 16;
 pub const OFF_PARAMS: usize = 32;
 pub const NAME_LEN: usize = 32;
