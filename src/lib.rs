@@ -6,6 +6,8 @@ pub mod protocol;
 pub mod transport;
 
 #[cfg(feature = "tuner")]
+pub(crate) mod audio;
+#[cfg(feature = "tuner")]
 pub mod endpoint;
 #[cfg(feature = "tuner")]
 pub mod recorder;

@@ -170,7 +170,7 @@ impl Recorder {
         }
         self.stop = None;
         if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
+            crate::audio::join_bounded(worker, crate::audio::RELEASE_TIMEOUT);
         }
         self.poll();
         if self.status != Status::Error {

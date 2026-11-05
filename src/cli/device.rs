@@ -18,6 +18,11 @@ pub(crate) fn scan(all: bool) -> Result<()> {
         if !all {
             println!("hint: `scx2 scan --all` lists every HID device");
         }
+        #[cfg(target_os = "linux")]
+        println!(
+            "hint: Linux exposes HID devices as /dev/hidraw*; if none are listed, check the \
+             cable and install packaging/linux/99-scx2.rules"
+        );
         return Ok(());
     }
     for device in devices {
