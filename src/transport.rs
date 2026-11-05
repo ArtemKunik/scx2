@@ -11,6 +11,13 @@ use hidapi::{HidApi, HidDevice};
 
 use crate::protocol::{self, PRODUCT_ID, REPORT_SIZE, VENDOR_ID};
 
+/// Extra advice appended to "could not open the amp", per platform.
+#[cfg(target_os = "linux")]
+const ACCESS_HINT: &str = "\n- on Linux the amp is a /dev/hidraw node: install \
+     packaging/udev/70-scx2.rules so it is readable without root, then replug";
+#[cfg(not(target_os = "linux"))]
+const ACCESS_HINT: &str = "";
+
 /// A device as reported by the HID enumerator.
 #[derive(Debug, Clone)]
 pub struct DeviceSummary {
@@ -86,7 +93,7 @@ fn open_device(path: Option<&str>) -> Result<HidDevice> {
                         "could not open the amp [{VENDOR_ID:04x}:{PRODUCT_ID:04x}]: {error}\n\
                          - is the amp powered on and connected with a data cable?\n\
                          - close Fender FUSE or anything else holding the device\n\
-                         - `scx2 scan --all` lists every HID device the system can see"
+                         - `scx2 scan --all` lists every HID device{ACCESS_HINT}"
                     )
                 })?,
             }

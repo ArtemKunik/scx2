@@ -34,9 +34,9 @@ machine with the amp attached.
 
 | File | Change |
 | --- | --- |
-| `Cargo.toml` | Move `windows` to `[target.'cfg(windows)'.dependencies]`; keep `tuner = ["dep:cpal", "dep:windows", "dep:hound"]` |
+| `Cargo.toml` | Move `windows` to `[target.'cfg(windows)'.dependencies]`; use `hidapi`'s `basic-udev` backend on Linux; keep `tuner = ["dep:cpal", "dep:windows", "dep:hound"]` |
 | `src/endpoint.rs` | The module is Windows-only in meaning. Keep the stubs or gate the module; no "Enable amp input" off Windows |
-| `src/ui/tuner.rs` | Hide the **Enable amp input** button (`cfg!(windows)`) and drop the Windows hover text |
+| `src/ui/tuner.rs` | Hide the **Enable amp input** button (`endpoint::can_enable()`) and drop the Windows hover text |
 | `src/transport.rs` | Platform-neutral error text; prefer the vendor HID interface in `scan`/`open` (composite device) |
 | `src/windows.rs` | Keep the stubs; `report_ui_error` should fall back to `eprintln!` off Windows |
 | `src/recorder.rs` | No change expected — `HOME` and `xdg-open` branches already exist. Verify the take path and folder opening |
@@ -52,7 +52,7 @@ Do not change the protocol, frame builders, `.fuse` handling, or the UI layout.
 Ubuntu 24.04 / Debian 12:
 
 ```console
-sudo apt install build-essential pkg-config libudev-dev libasound2-dev \
+sudo apt install build-essential pkg-config libasound2-dev \
   libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 cargo build --release
@@ -61,7 +61,7 @@ cargo build --release
 Fedora 40+:
 
 ```console
-sudo dnf install gcc gcc-c++ make pkgconf-pkg-config systemd-devel \
+sudo dnf install gcc gcc-c++ make pkgconf-pkg-config \
   alsa-lib-devel libxkbcommon-devel wayland-devel libX11-devel \
   mesa-libGL-devel libxcb-devel
 ```
@@ -69,15 +69,17 @@ sudo dnf install gcc gcc-c++ make pkgconf-pkg-config systemd-devel \
 Arch:
 
 ```console
-sudo pacman -S --needed base-devel pkgconf systemd-libs alsa-lib \
+sudo pacman -S --needed base-devel pkgconf alsa-lib \
   libxkbcommon wayland libx11 mesa libxcb
 ```
 
 Why these:
 
-* `libudev` — the `hidapi` Linux backend compiles its C hidraw shim and probes
-  `libudev` at build time. It does not use libusb and does not need a driver
-  swap.
+* `hidapi` needs no extra package: the Linux build selects the pure-Rust
+  `basic-udev` backend, which reads `/sys/class/hidraw` directly. Switching back
+  to the C hidraw backend (`features = ["linux-static-hidraw"]`) would require
+  `libudev-dev`/`systemd-devel`. It does not use libusb and does not need a
+  driver swap.
 * `alsa-lib` — `cpal` uses ALSA on Linux. PipeWire and PulseAudio both provide
   ALSA compatibility, so no extra runtime setup is usually needed.
 * X11/Wayland/GL — `eframe`/`winit`/`glutin`.
@@ -97,8 +99,10 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1ed8", ATTRS{idProduct}=="000e", TAG+="ua
 
 ```console
 sudo udevadm control --reload-rules
-sudo udevadm trigger
-# replug the amp, then:
+sudo udevadm trigger --action=add --subsystem-match=hidraw
+# a plain `udevadm trigger` sends change events, which keep the old
+# permissions; `--action=add` re-runs the rule and applies the ACL.
+# Replugging the amp works too. Then:
 ls -l /dev/hidraw*        # shows + for the logged-in user via uaccess
 ```
 
@@ -115,9 +119,9 @@ update work (M5.2) starts.
   when it is plugged; there is nothing to enable. The Windows-only button is
   hidden, and the tuner falls back to "Auto" / the device picker.
 * **Audio names.** `is_amp_input` matches `"superchamp"`, `"super champ"` and
-  `"internal aux jack"`. ALSA/PipeWire usually name the card from its USB
-  product string, so `"SuperChamp X2 Amp"` should match, but this is one of the
-  hardware checks below.
+  `"internal aux jack"` and `"card=amp"`. ALSA names the card from the USB
+  product string, so the amp's PCMs read `hw:CARD=Amp,DEV=0`; the last hint
+  matches that form.
 * **File dialogs.** `rfd` defaults to the XDG portal on Linux, so no GTK build
   dependency. A session without a portal falls back to typing a path (existing
   UI behaviour).

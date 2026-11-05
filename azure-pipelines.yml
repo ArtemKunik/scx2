@@ -20,7 +20,7 @@ steps:
   - script: |
       sudo apt-get update
       sudo apt-get install -y --no-install-recommends \
-        pkg-config libudev-dev libasound2-dev \
+        pkg-config libasound2-dev \
         libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev
     displayName: Install system dependencies
 
@@ -36,7 +36,7 @@ steps:
       cargo build --release --no-default-features
     displayName: Offline tests and build
 
-  # The full editor: audio (ALSA), HID (libudev) and the window stack.
+  # The full editor: audio (ALSA), HID (hidraw) and the window stack.
   - script: |
       cargo test
       cargo build --release

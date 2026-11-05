@@ -114,11 +114,12 @@ gets a large strobe display. A string turns green when it is within a few cents.
 The tuner follows the amp's input automatically; **Rescan** re-lists devices, and
 if Windows has the amp's capture endpoint disabled, **Enable amp input** switches
 it on from inside the app (the same operation as the Sound control panel's
-Enable item). The USB signal is post-amp and post-effects, so a clean voice with
+Enable item). On Linux the input appears on its own, so **Rescan** is enough.
+The USB signal is post-amp and post-effects, so a clean voice with
 effects bypassed gives the most reliable reading.
 
 **Recorder** writes one input channel to a 24-bit WAV in
-`Music\SCX2 Recordings`, with a `.json` sidecar holding the live preset
+`Music/SCX2 Recordings`, with a `.json` sidecar holding the live preset
 (voice, cabinet, every block and its raw bytes) so a take can be recalled.
 Pick the input and channel, then **Record** / **Stop**. The meter latches the
 take's peak and flags clipping; **Open folder** shows the takes. The full
@@ -153,11 +154,52 @@ Rust 1.75 or newer.
 ```console
 cargo build --release
 cargo test
-target\release\scx2.exe scan
+target/release/scx2 scan
 ```
 
 No amp is needed for `replay`; the bundled capture is a complete dump recorded
 from FUSE in 2021.
+
+### Linux
+
+The editor and every command build and run on Linux. The only extra system
+package is ALSA's development files, which `cpal` links against for the tuner
+and recorder:
+
+```console
+sudo apt install libasound2-dev     # Debian, Ubuntu, Pop!_OS
+sudo dnf install alsa-lib-devel     # Fedora
+sudo pacman -S alsa-lib             # Arch
+```
+
+`hidapi` uses its pure-Rust `basic-udev` backend on Linux, so `libudev-dev` is
+not needed. The window runs on X11 or Wayland through eframe/winit, and the file
+dialogs use `xdg-desktop-portal`, which desktop installs already run.
+
+The amp's raw HID node (`/dev/hidraw*`) is root-only until udev is told
+otherwise. Install the rule once, then replug the amp:
+
+```console
+sudo cp packaging/udev/70-scx2.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --action=add --subsystem-match=hidraw
+scx2 scan
+```
+
+Use `--action=add`: a plain `udevadm trigger` sends `change` events, and udev
+deliberately keeps the existing permissions for those, so the ACL never appears.
+Replugging the amp works too.
+
+If `scx2 scan --all` lists nothing at all, the machine is not exposing any
+`/dev/hidraw*` nodes (`ls /dev/hidraw*`) — common in VMs without USB
+passthrough, and unrelated to the app.
+
+The Windows-only **Enable amp input** action is hidden on Linux: ALSA and
+PipeWire publish the amp's USB capture device as soon as it is plugged in, so
+**Rescan** in the tuner is enough.
+
+[docs/linux.md](docs/linux.md) is the full delivery spec: package lists per
+distribution, the hardware checks, and the CI definitions.
 
 ## How it works
 
@@ -181,6 +223,9 @@ src/capture.rs     USBPcap (.pcap) reader for offline work
 src/fuse.rs        Fender FUSE `.fuse` XML import/export
 src/models.rs      DSP model id -> name tables, effect params/defaults, FUSE ids
 src/transport.rs   hidapi device discovery and I/O
+src/tuner.rs       USB audio capture and YIN pitch detection
+src/recorder.rs    24-bit WAV takes with a preset sidecar
+src/endpoint.rs    Windows capture-endpoint switch (absent elsewhere)
 src/ui/            egui editor: app state, amp view, procedural materials
 src/windows.rs     console detach and error dialog
 ```

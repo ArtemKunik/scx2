@@ -29,7 +29,16 @@ const EVENT_CAPACITY: usize = 128;
 const QUEUE_SAMPLES: usize = 48_000 * 2;
 
 /// Names that identify the amp's USB capture endpoint, lower-case.
-const AMP_INPUT_HINTS: [&str; 3] = ["superchamp", "super champ", "internal aux jack"];
+///
+/// Windows names the endpoint after the jack (`Internal AUX Jack (SuperChamp X2
+/// Amp)`). ALSA names it after the card, and the card id is the USB product
+/// string cut down to `Amp`, so its PCMs read `hw:CARD=Amp,DEV=0`.
+const AMP_INPUT_HINTS: [&str; 4] = [
+    "superchamp",
+    "super champ",
+    "internal aux jack",
+    "card=amp",
+];
 
 /// Whether an audio input name looks like the amp's USB capture endpoint.
 pub fn is_amp_input(name: &str) -> bool {
@@ -219,7 +228,7 @@ impl Tuner {
         self.stop = None;
         self.events = None;
         if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
+            crate::audio::join_bounded(worker, crate::audio::RELEASE_TIMEOUT);
         }
         self.status = Status::Idle;
         self.reading = Reading::default();
@@ -709,6 +718,16 @@ fn parabolic_offset(values: &[f32], tau: usize) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_amp_input_is_recognised_on_every_platform() {
+        // Windows names the endpoint after the jack; ALSA after the card id.
+        assert!(is_amp_input("Internal AUX Jack (SuperChamp X2 Amp)"));
+        assert!(is_amp_input("hw:CARD=Amp,DEV=0"));
+        assert!(is_amp_input("plughw:CARD=Amp,DEV=0"));
+        assert!(!is_amp_input("hw:CARD=Generic_1,DEV=0"));
+        assert!(!is_amp_input("default"));
+    }
 
     fn sine(frequency: f32, sample_rate: f32, seconds: f32) -> Vec<f32> {
         let count = (sample_rate * seconds) as usize;
