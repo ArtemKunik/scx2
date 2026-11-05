@@ -48,7 +48,7 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | Preset browser | missing | FUSE filters PC vs. amp presets, browses previous/next, searches and sorts. `scx2` lists the current dump only. |
 | Preset info dialog | missing | No description/tags/genres/author editing. |
 | Backup | partial | `dump` / Save Backup writes a whole-dump JSON. No description, backup list or single-preset selection in the UI. |
-| Restore | partial | `scx2 restore` writes a backup back to the amp. The editor can open a backup but does not restore it to the amp. |
+| Restore | yes | `scx2 restore` is the reference; **Restore…** in the editor takes a backup first, writes block by block with progress and cancel, and compares the re-dump with the backup. The backup's live buffer is not written. |
 | Factory restore | missing | FUSE can reset the amp's presets/device state to factory defaults. |
 | Recall a stored preset from the host | blocked | The SCX2 has no host recall command; the front-panel knob is the only way. |
 
@@ -84,8 +84,8 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 
 The largest remaining gaps are librarian/device operations, not sound editing:
 
-1. **Save-to-amp, rename and restore in the editor.** The protocol is already
-   verified; this is mostly wiring `store`, `rename` and `restore` into the UI.
+1. **Save-to-amp, rename and restore in the editor.** Done: the verified
+   frames are wired into the toolbar and sidebar, each with a read-back check.
 2. **Preset browser and new/duplicate/overwrite.** Add PC-preset browsing,
    search/filter, previous/next and a "New Preset" action.
 3. **Partial import and sub-presets.** Let a `.fuse` or another preset

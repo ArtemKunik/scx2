@@ -115,6 +115,9 @@ impl App {
                 if tool_button(ui, "Save Backup", true, ButtonKind::Plain).clicked() {
                     self.save_backup();
                 }
+                if tool_button(ui, "Restore…", true, ButtonKind::Plain).clicked() {
+                    self.open_restore_dialog();
+                }
                 if tool_button(ui, "Undo", !self.history.is_empty(), ButtonKind::Plain).clicked() {
                     self.undo();
                 }

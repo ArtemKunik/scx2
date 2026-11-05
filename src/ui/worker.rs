@@ -46,6 +46,10 @@ pub(crate) enum Cmd {
     Store { bank: u8, index: u8, name: String },
     /// Rewrite a stored slot's name without touching its sound.
     Rename { bank: u8, index: u8, name: String },
+    /// Write stored presets from a backup, one report at a time.
+    Restore { presets: Vec<Preset> },
+    /// Stop a running restore after the block already sent.
+    CancelRestore,
     /// Dump as soon as the write queue is empty, e.g. to read a target slot.
     Refresh,
 }
@@ -71,6 +75,13 @@ pub(crate) enum Ev {
         index: u8,
         outcome: Result<String, String>,
     },
+    /// Block `done` of `total` was written to the amp.
+    RestoreProgress {
+        done: usize,
+        total: usize,
+    },
+    /// The restore stopped, and the re-dump has been compared with the backup.
+    RestoreDone(RestoreReport),
     Warning(String),
     Error(String),
 }
@@ -79,6 +90,53 @@ pub(crate) enum Ev {
 enum DeviceWrite {
     Store { bank: u8, index: u8, name: String },
     Rename { bank: u8, index: u8, name: String },
+}
+
+/// A restore in progress: every report to write, in backup order.
+struct RestoreJob {
+    /// Slot key and frame, in the order the backup lists them.
+    reports: VecDeque<(u8, u8, [u8; protocol::REPORT_SIZE])>,
+    total: usize,
+    written: usize,
+    /// Slots whose last report has been sent; only these can be compared.
+    done: Vec<(u8, u8)>,
+    /// The slot the last sent report belonged to.
+    current: Option<(u8, u8)>,
+    /// The slots the backup expects, for the read-back comparison.
+    source: Vec<Preset>,
+}
+
+impl RestoreJob {
+    fn new(presets: Vec<Preset>) -> Self {
+        let mut reports = VecDeque::new();
+        for preset in &presets {
+            for message in preset.messages() {
+                reports.push_back((
+                    preset.bank,
+                    preset.index,
+                    protocol::as_host_frame(message.as_bytes(), protocol::HOST_CONTROL),
+                ));
+            }
+        }
+        RestoreJob {
+            total: reports.len(),
+            reports,
+            written: 0,
+            done: Vec::new(),
+            current: None,
+            source: presets,
+        }
+    }
+}
+
+/// What a finished or cancelled restore wrote, and how it read back.
+pub(crate) struct RestoreReport {
+    pub written: usize,
+    pub total: usize,
+    pub slots: usize,
+    pub cancelled: bool,
+    /// One line per slot that does not match the backup.
+    pub mismatches: Vec<String>,
 }
 
 /// A write whose result is checked against the next complete dump.
@@ -94,6 +152,14 @@ enum Verify {
         name: String,
         /// The slot as it was before the rename, for the byte comparison.
         before: Option<Preset>,
+    },
+    Restore {
+        source: Vec<Preset>,
+        /// A slot the restore started but did not finish, if any.
+        partial: Option<(u8, u8)>,
+        written: usize,
+        total: usize,
+        cancelled: bool,
     },
 }
 
@@ -140,6 +206,9 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
     let mut last_dump: Option<Dump> = None;
     // A write whose read-back waits for the next complete dump.
     let mut verify: Option<Verify> = None;
+    // A backup being written to the amp, one report per loop turn.
+    let mut restore: Option<RestoreJob> = None;
+    let mut cancel_restore = false;
     let mut awaiting_ack: Option<Instant> = None;
     let mut last_block = Instant::now() - BLOCK_GAP;
     let mut last_activity = Instant::now() - QUIET;
@@ -177,6 +246,11 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                 Ok(Cmd::Rename { bank, index, name }) => {
                     device_out.push_back(DeviceWrite::Rename { bank, index, name });
                 }
+                Ok(Cmd::Restore { presets }) => {
+                    restore = Some(RestoreJob::new(presets));
+                    cancel_restore = false;
+                }
+                Ok(Cmd::CancelRestore) => cancel_restore = true,
                 Ok(Cmd::Refresh) => {
                     dump_soon = Some(Instant::now());
                 }
@@ -188,6 +262,14 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
         let now = Instant::now();
         if awaiting_ack.is_some_and(|sent| now - sent >= ACK_WAIT) {
             awaiting_ack = None;
+        }
+        // A cancel stops between blocks, and still reads the amp back so the
+        // person can see which slots were touched.
+        if cancel_restore {
+            cancel_restore = false;
+            if let Some(job) = restore.take() {
+                finish_restore(job, true, &mut verify, &mut dump_soon, now);
+            }
         }
         // One write at a time, as the amp answers each one.
         if awaiting_ack.is_none() {
@@ -266,6 +348,34 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                     }
                     // Let the amp write flash, then read the slot back.
                     dump_soon = Some(now + Duration::from_millis(400));
+                } else if let Some(job) = restore.as_mut() {
+                    // Restores write stored memory block by block. They wait
+                    // for any dump in flight: the two streams would interleave.
+                    if collecting.is_none() {
+                        if let Some((bank, index, frame)) = job.reports.pop_front() {
+                            amp.write_report(&frame)?;
+                            amp.write_report(&protocol::execute_model_change())?;
+                            job.written += 1;
+                            job.current = Some((bank, index));
+                            // The last report of a slot is what finishes it.
+                            if job.reports.front().map(|next| (next.0, next.1))
+                                != Some((bank, index))
+                            {
+                                job.done.push((bank, index));
+                            }
+                            last_block = now;
+                            last_activity = now;
+                            quiet_until = now + Duration::from_secs(1);
+                            send(Ev::RestoreProgress {
+                                done: job.written,
+                                total: job.total,
+                            });
+                            if job.reports.is_empty() {
+                                let job = restore.take().expect("the restore is running");
+                                finish_restore(job, false, &mut verify, &mut dump_soon, now);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -350,6 +460,30 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                                         outcome,
                                     });
                                 }
+                                Some(Verify::Restore {
+                                    source,
+                                    partial,
+                                    written,
+                                    total,
+                                    cancelled,
+                                }) => {
+                                    let slots = source.len();
+                                    let mut mismatches = verify_restore(&done.dump, &source);
+                                    if let Some((bank, index)) = partial {
+                                        mismatches.push(format!(
+                                            "{} {}: partially written (the restore stopped between its blocks)",
+                                            protocol::bank_label(bank),
+                                            index
+                                        ));
+                                    }
+                                    send(Ev::RestoreDone(RestoreReport {
+                                        written,
+                                        total,
+                                        slots,
+                                        cancelled,
+                                        mismatches,
+                                    }));
+                                }
                                 None => {}
                             }
                             last_dump = Some(done.dump.clone());
@@ -372,7 +506,8 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
             && params_out.is_empty()
             && blocks_out.is_empty()
             && bypasses_out.is_empty()
-            && device_out.is_empty();
+            && device_out.is_empty()
+            && restore.is_none();
         let asked = dump_soon.is_some_and(|at| now >= at);
         let routine = now >= next_resync && now - last_activity >= QUIET;
         if collecting.is_none() && idle && (asked || routine) {
@@ -387,6 +522,38 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
             });
         }
     }
+}
+
+/// Hand a finished or cancelled restore to the read-back stage.
+///
+/// Only slots whose every block went out can be compared with the backup:
+/// untouched slots still hold their old sound, and the slot in flight is
+/// partial by definition.
+fn finish_restore(
+    job: RestoreJob,
+    cancelled: bool,
+    verify: &mut Option<Verify>,
+    dump_soon: &mut Option<Instant>,
+    now: Instant,
+) {
+    let partial = if cancelled {
+        job.current.filter(|key| !job.done.contains(key))
+    } else {
+        None
+    };
+    let source: Vec<Preset> = job
+        .source
+        .into_iter()
+        .filter(|preset| job.done.contains(&(preset.bank, preset.index)))
+        .collect();
+    *verify = Some(Verify::Restore {
+        source,
+        partial,
+        written: job.written,
+        total: job.total,
+        cancelled,
+    });
+    *dump_soon = Some(now + Duration::from_millis(400));
 }
 
 /// Lay values that arrived during a dump over its older copy of the live block.
@@ -511,10 +678,51 @@ fn verify_rename(
     }
 }
 
+/// Compare every restored slot with the backup it came from.
+///
+/// A restore copies whole blocks, so the payload must match; the frame header
+/// and the execute flag are excluded. One line per slot that does not match,
+/// so a cancelled restore can still report the slots it touched.
+fn verify_restore(dump: &Dump, source: &[Preset]) -> Vec<String> {
+    let mut mismatches = Vec::new();
+    for expected in source {
+        let label = format!("{} {}", protocol::bank_label(expected.bank), expected.index);
+        let Some(actual) = dump.get(expected.bank, expected.index) else {
+            mismatches.push(format!("{label}: the amp does not report this slot"));
+            continue;
+        };
+        let mut problems = Vec::new();
+        if actual.name != expected.name {
+            problems.push(format!("the name reads {:?}", actual.name));
+        }
+        let changes = protocol::diff_payload(expected, actual);
+        if let Some(first) = changes.first() {
+            problems.push(format!(
+                "{} byte(s) differ, first at {} offset {} (0x{:02x} -> 0x{:02x})",
+                changes.len(),
+                first.kind.label(),
+                first.offset,
+                first.before,
+                first.after
+            ));
+        }
+        for (kind, model) in protocol::models_missing_from(expected, actual) {
+            problems.push(format!(
+                "the {} model 0x{model:04x} is missing",
+                kind.label()
+            ));
+        }
+        if !problems.is_empty() {
+            mismatches.push(format!("{label}: {}", problems.join("; ")));
+        }
+    }
+    mismatches
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{AMP_TO_HOST, FRAME_MARKER, OFF_MODEL, REPORT_SIZE};
+    use crate::protocol::{Message, AMP_TO_HOST, FRAME_MARKER, OFF_MODEL, REPORT_SIZE};
 
     fn report(kind: Kind, bank: u8, index: u8, model: u16, volume: u8) -> [u8; REPORT_SIZE] {
         let mut raw = [0u8; REPORT_SIZE];
@@ -619,5 +827,131 @@ mod tests {
         let message = verify_rename(&dump, None, protocol::BANK_AMP, 3, "My preset")
             .expect("the name matches");
         assert!(message.contains("name read back"), "{message}");
+    }
+
+    fn preset(bank: u8, index: u8, name: &str, volume: u8) -> Preset {
+        let mut preset = Preset::new(bank, index);
+        preset.add(
+            Message::from_bytes(protocol::name_change(bank, index, name))
+                .expect("a valid name block"),
+        );
+        preset.add(
+            Message::from_bytes(report(Kind::Amp, bank, index, 0x21, volume))
+                .expect("a valid amp block"),
+        );
+        preset
+    }
+
+    fn dump_from(presets: &[Preset]) -> Dump {
+        let mut dump = Dump::new();
+        for preset in presets {
+            for message in preset.messages() {
+                dump.add_raw(message.as_bytes());
+            }
+        }
+        dump
+    }
+
+    #[test]
+    fn a_restore_job_writes_names_before_blocks_in_backup_order() {
+        let presets = vec![
+            preset(protocol::BANK_AMP, 1, "one", 0x10),
+            preset(protocol::BANK_FX, 2, "two", 0x20),
+        ];
+        let job = RestoreJob::new(presets);
+        assert_eq!(job.total, 4, "two messages per preset");
+        assert_eq!(job.written, 0);
+        assert_eq!(job.reports[0].2[2], Kind::Name.code());
+        assert_eq!(job.reports[0].2[1], protocol::HOST_CONTROL);
+        assert_eq!(job.reports[1].2[2], Kind::Amp.code());
+        assert_eq!(job.reports[2].2[2], Kind::Name.code());
+    }
+
+    /// Run the job one report at a time, the way the worker loop does.
+    fn write_reports(job: &mut RestoreJob, count: usize) {
+        for _ in 0..count {
+            let Some((bank, index, _)) = job.reports.pop_front() else {
+                break;
+            };
+            job.written += 1;
+            job.current = Some((bank, index));
+            if job.reports.front().map(|next| (next.0, next.1)) != Some((bank, index)) {
+                job.done.push((bank, index));
+            }
+        }
+    }
+
+    #[test]
+    fn a_cancelled_restore_compares_only_the_slots_that_finished() {
+        let mut job = RestoreJob::new(vec![
+            preset(protocol::BANK_AMP, 1, "one", 0x10),
+            preset(protocol::BANK_FX, 2, "two", 0x20),
+        ]);
+        // One report: the name of amp 1, nothing complete yet.
+        write_reports(&mut job, 1);
+        let mut verify = None;
+        let mut dump_soon = None;
+        finish_restore(job, true, &mut verify, &mut dump_soon, Instant::now());
+        match verify {
+            Some(Verify::Restore {
+                source, partial, ..
+            }) => {
+                assert!(source.is_empty(), "no slot finished");
+                assert_eq!(partial, Some((protocol::BANK_AMP, 1)));
+            }
+            _ => panic!("a restore verify was expected"),
+        }
+        assert!(dump_soon.is_some(), "a re-dump is still requested");
+    }
+
+    #[test]
+    fn a_finished_restore_compares_every_slot_the_backup_lists() {
+        let mut job = RestoreJob::new(vec![
+            preset(protocol::BANK_AMP, 1, "one", 0x10),
+            preset(protocol::BANK_FX, 2, "two", 0x20),
+        ]);
+        write_reports(&mut job, 4);
+        let mut verify = None;
+        let mut dump_soon = None;
+        finish_restore(job, false, &mut verify, &mut dump_soon, Instant::now());
+        match verify {
+            Some(Verify::Restore {
+                source, partial, ..
+            }) => {
+                assert_eq!(source.len(), 2);
+                assert_eq!(partial, None);
+            }
+            _ => panic!("a restore verify was expected"),
+        }
+    }
+
+    #[test]
+    fn a_restore_that_matches_the_backup_has_no_mismatches() {
+        let source = vec![preset(protocol::BANK_AMP, 3, "My preset", 0x63)];
+        let dump = dump_from(&source);
+        assert!(verify_restore(&dump, &source).is_empty());
+    }
+
+    #[test]
+    fn a_slot_that_kept_an_older_value_is_reported() {
+        let source = vec![preset(protocol::BANK_AMP, 3, "My preset", 0x63)];
+        let mut dump = dump_from(&source);
+        dump.get_mut(protocol::BANK_AMP, 3)
+            .and_then(|preset| preset.block_mut(Kind::Amp))
+            .expect("the amp block exists")
+            .set_byte(32, 0x40);
+        let mismatches = verify_restore(&dump, &source);
+        assert_eq!(mismatches.len(), 1);
+        assert!(mismatches[0].contains("amp 3"), "{mismatches:?}");
+        assert!(mismatches[0].contains("offset 32"), "{mismatches:?}");
+    }
+
+    #[test]
+    fn a_slot_missing_from_the_re_dump_is_reported() {
+        let source = vec![preset(protocol::BANK_FX, 2, "gone", 0x63)];
+        let dump = dump_from(&[]);
+        let mismatches = verify_restore(&dump, &source);
+        assert_eq!(mismatches.len(), 1);
+        assert!(mismatches[0].contains("does not report"), "{mismatches:?}");
     }
 }

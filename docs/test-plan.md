@@ -204,6 +204,23 @@ The frame is the verified one; this checklist covers the dialog around it.
 6. Disconnect and repeat: both frames must appear in the status bar as a dry
    run, and nothing is written.
 
+### Restore from the editor (M1.3)
+
+1. Open **Restore…** and pick a backup. The dialog must show the source device,
+   the amp/FX preset counts and every target slot under **Will write**.
+2. Try each scope: all stored, amp only, FX only, and one preset from the
+   combo box. The block and slot counts must follow the choice.
+3. Confirm. The **Back up and restore** button must open a file dialog first;
+   cancelling it must leave the amp untouched.
+4. Watch the progress bar: blocks must advance, and **Cancel restore** must stop
+   between blocks. The status must name how many blocks were written and list
+   the slots that no longer match.
+5. Restore a full backup and let it finish. The status must read
+   `re-dump matches the backup`, and the amp's front-panel recall must load the
+   restored presets with the right names.
+6. Restore only the FX bank and confirm the amp presets are unchanged.
+7. Power-cycle and confirm the restored slots survived.
+
 ### MIDI foot controller (M8.1)
 
 1. Connect a class-compliant MIDI controller, open **MIDI**, and confirm it is

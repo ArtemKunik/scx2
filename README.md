@@ -8,12 +8,13 @@ protocol over USB. This project talks to it directly.
 
 > **Status: read and write verified on hardware** (Super Champ X2, firmware
 > `May 30 2013`). Dumping, polling, live parameter writes, effect editing,
-> `.fuse` import/export, **store** and **rename** work, and a saved slot
-> survives a power cycle. Both also work from the editor, which reads the slot
-> back after each write. Recall is
-> read-only: the SCX2 has no host preset-load command, so the front-panel knob
-> is the only way to load a slot. Writes stay dry-run unless you pass `--yes`.
-> The decoder is also covered by tests against a real FUSE capture.
+> `.fuse` import/export, **store**, **rename** and **restore** work, and a saved
+> slot survives a power cycle. Store and rename also work from the editor, which
+> reads the slot back after each write; a restore re-dumps and compares every
+> slot with the file. Recall is read-only: the SCX2 has no host preset-load
+> command, so the front-panel knob is the only way to load a slot. Writes stay
+> dry-run unless you pass `--yes`. The decoder is also covered by tests against
+> a real FUSE capture.
 > See [docs/test-plan.md](docs/test-plan.md).
 
 ## Commands
@@ -105,7 +106,7 @@ so both can be changed in one visit. Dragging the Voice knob still sweeps
 through the voices.
 
 The toolbar has **Save to Amp…**, **Open…**, **Save As…**, **Save Backup**,
-**Undo**, **Redo** and **Revert**, with Ctrl+O / Ctrl+S / Ctrl+Z /
+**Restore…**, **Undo**, **Redo** and **Revert**, with Ctrl+O / Ctrl+S / Ctrl+Z /
 Ctrl+Shift+Z shortcuts. A `●` in the title means the current dump has unsaved
 changes. **Save to Amp…** writes the live buffer into a bank/slot with FUSE's
 verified save frame: it shows the name the amp will store, warns when it is
@@ -114,6 +115,11 @@ and reads the slot back afterwards, comparing every payload byte and the name.
 Right-click a stored preset in the sidebar to **Rename…** it: only the `0x04`
 name block and an execute frame are written, and the read-back checks that no
 other byte moved.
+**Restore…** writes a JSON backup back to the amp. It lists every slot it will
+replace, saves the current amp state to a backup first, then writes block by
+block with a progress bar and a cancel that stops between blocks; afterwards it
+re-dumps and compares every restored slot with the backup. The backup's live
+buffer is never written.
 `Open` and the drag target accept both JSON backups and Fender FUSE `.fuse`
 files; `Save As` writes JSON for the whole dump, or `.fuse` for the selected
 preset.

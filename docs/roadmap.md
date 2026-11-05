@@ -167,6 +167,12 @@ bytes unchanged.
 **Current:** `scx2 restore <file>` works from the CLI; opening a backup in the
 editor only loads it locally.
 
+**State:** shipped (2026-11-05). Toolbar **Restore…** picks a JSON backup,
+offers All / Amp / FX / one preset, lists every target slot and what it
+replaces, takes a mandatory backup of the current amp state, writes block by
+block with progress and cancel, then re-dumps and compares every restored slot
+with the backup. The backup's live buffer is not written.
+
 **Scope**
 
 * whole dump,

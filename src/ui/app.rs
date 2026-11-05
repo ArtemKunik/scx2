@@ -17,6 +17,7 @@ use crate::tuner::Tuner;
 
 use super::art::Art;
 use super::rename::RenameDialog;
+use super::restore::RestoreDialog;
 use super::store::StoreDialog;
 use super::sync::Activity;
 use super::worker::{spawn_worker, Cmd, Ev};
@@ -97,6 +98,8 @@ pub struct App {
     pub(crate) store: Option<StoreDialog>,
     /// The "Rename Preset" dialog, when it is open.
     pub(crate) rename: Option<RenameDialog>,
+    /// The "Restore Backup" dialog, when it is open or running.
+    pub(crate) restore: Option<RestoreDialog>,
     /// A device operation the worker has not confirmed yet, and what it was.
     pub(crate) waiting: Option<(Instant, &'static str)>,
     /// When the last full dump arrived, shown in the save dialog.
@@ -201,6 +204,7 @@ impl App {
             path: None,
             store: None,
             rename: None,
+            restore: None,
             waiting: None,
             synced_at: None,
             midi: midi_input::Config::default(),
@@ -323,13 +327,26 @@ impl App {
                     index,
                     outcome,
                 } => self.finish_operation(bank, index, outcome),
+                Ev::RestoreProgress { done, total } => self.on_restore_progress(done, total),
+                Ev::RestoreDone(report) => self.on_restore_done(report),
                 Ev::Warning(message) => self.error = Some(message),
                 Ev::Error(message) => {
+                    let stopped_midway = self
+                        .restore
+                        .as_ref()
+                        .is_some_and(|dialog| dialog.is_running());
                     self.connected = false;
                     self.connecting = false;
                     self.waiting = None;
+                    self.restore = None;
                     self.status = "Not connected".into();
-                    self.error = Some(message);
+                    self.error = Some(if stopped_midway {
+                        format!(
+                            "{message}\nThe restore stopped mid-way. Check the slots it had already written."
+                        )
+                    } else {
+                        message
+                    });
                     self.rx = None;
                 }
             }
@@ -346,6 +363,20 @@ impl App {
             } else {
                 ctx.request_repaint_after(Duration::from_millis(250));
             }
+        }
+        if self.restore_stalled() {
+            self.restore = None;
+            self.error = Some(
+                "The amp stopped reporting during the restore. Check the slots it had already written before trying again."
+                    .into(),
+            );
+        }
+        if self
+            .restore
+            .as_ref()
+            .is_some_and(|dialog| dialog.is_running())
+        {
+            ctx.request_repaint_after(Duration::from_millis(500));
         }
         if !self.flash.is_empty() {
             ctx.request_repaint_after(Duration::from_millis(33));

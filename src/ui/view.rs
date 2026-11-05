@@ -78,6 +78,7 @@ pub(super) fn show(app: &mut App, ctx: &egui::Context, art: &Art) {
 
     app.store_window(ctx);
     app.rename_window(ctx);
+    app.restore_window(ctx);
     app.midi_window(ctx);
     drop_overlay(ctx);
 }

@@ -23,6 +23,7 @@ mod pedal;
 mod pedalstage;
 mod recorder;
 mod rename;
+mod restore;
 mod rig;
 mod sidebar;
 mod store;
