@@ -13,8 +13,8 @@ use crate::windows::{detach_console_if_owner, report_ui_error};
 
 use self::args::{Cli, Command};
 use self::device::{dump, learn, monitor, scan};
-use self::edit::{apply, restore, send};
-use self::offline::{diff, replay, show};
+use self::edit::{apply, bypass, recall, rename, restore, send, store};
+use self::offline::{diff, export, import, replay, show};
 use self::param::{param, probe};
 
 pub fn run() -> Result<()> {
@@ -47,6 +47,8 @@ pub fn run() -> Result<()> {
         Command::Dump { path, out } => dump(path.as_deref(), out),
         Command::Show { file, preset, raw } => show(&file, preset.as_deref(), raw),
         Command::Diff { before, after } => diff(&before, &after),
+        Command::Import { file, out } => import(&file, out),
+        Command::Export { file, preset, out } => export(&file, &preset, &out),
         Command::Monitor { path, timeout } => monitor(path.as_deref(), timeout),
         Command::Learn {
             path,
@@ -89,6 +91,28 @@ pub fn run() -> Result<()> {
             yes,
             no_execute,
         } => restore(&file, path.as_deref(), bank, yes, !no_execute),
+        Command::Recall { slot, bank, path } => recall(bank, slot, path.as_deref()),
+        Command::Store {
+            bank,
+            index,
+            name,
+            path,
+            yes,
+        } => store(bank, index, name.as_deref(), path.as_deref(), yes),
+        Command::Rename {
+            name,
+            bank,
+            index,
+            path,
+            yes,
+        } => rename(&name, bank, index, path.as_deref(), yes),
+        Command::Bypass {
+            kind,
+            slot,
+            off,
+            path,
+            yes,
+        } => bypass(&kind, slot, off, path.as_deref(), yes),
         Command::Param {
             index,
             value,

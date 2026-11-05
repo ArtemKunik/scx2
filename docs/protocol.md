@@ -151,6 +151,11 @@ Test that proved it: the live buffer held a `'65 Deluxe` (voice index `0x03` at
 offset 44). Sending offset 44 = `0x00` plus the execute frame, then re-dumping,
 reported `0x00`. Writing `0x03` back restored it.
 
+To change the voice, the model id at offset 16 has to move with the voice bytes.
+Writing offsets 44..46 alone leaves the model where it was; writing both makes a
+later dump report the new model (measured, `0x0053` to `0x006a`). Whether offset
+50 should follow as well is untested.
+
 Side effect: after an execute frame the amp reports byte 7 as `0x01` on every
 amp block (it was `0x00` in the pre-write dump). It does not affect the data,
 but `scx2 diff` will show it after any write session.
@@ -158,19 +163,107 @@ but `scx2 diff` will show it after any write session.
 The UI and `scx2 apply` / `scx2 restore` send the execute frame automatically;
 `--no-execute` disables it for experiments.
 
+## Bypassing an effect
+
+Verified on hardware (2026-11-04): FUSE has a fast bypass frame that needs no
+execute frame:
+
+```text
+host -> 19 c3 <family> <state> <slot>
+```
+
+`family` is the DSP kind minus 3: stomp `3`, mod `4`, delay `5`, reverb `6`.
+`state` is `1` for bypassed and `0` for enabled; `slot` is the block's slot
+byte (offset 18). Toggling the live reverb changed block offset 22 from `0` to
+`1`, and toggling it back restored `0`. `scx2 bypass reverb 5 --off` sends it.
+
+## Saving a preset
+
+Verified on hardware (2026-11-04, firmware `May 30 2013`): the save frame is
+
+```text
+host -> 1c 01 03 <bank> <index> 00 01 01 <name at 16..48>
+```
+
+The amp writes its **current live buffer** into `<bank>/<index>` and stores
+`<name>` (32 bytes, NUL padded). There is no per-block payload.
+
+* `bank` 1 is the amp preset bank, `2` the FX bank. FUSE writes `0` here because
+  a Mustang has one flat preset list; the SCX2 uses the bank byte.
+* Verified by saving into `fx 15` (empty, `NONE`) and `amp 15`, then reading both
+  slots back with `scx2 dump`. The names and contents changed as expected.
+* A stored slot also accepts a direct block write (`1c c3 ...` + `1c 03`); that
+  is how `scx2 restore` put the original bytes back after the test.
+* Persistence is proven: the `fx 15` marker still read back as `PERSIST TEST`
+  after a full power cycle, so the save reaches flash rather than RAM.
+
+## Recalling a preset
+
+There is **no host recall** on the SCX2. FUSE's load frame
+
+```text
+1c 01 01 <bank> <slot> 00 01
+```
+
+makes the amp stream its current state (a read); type bytes `0x00`, `0x02` and
+`0x04` get no reply. Writing a preset's blocks to bank 0 is not a substitute:
+on this amp that edits the currently selected preset slot, which can overwrite
+stored memory. The front-panel preset knob is the only way to recall.
+
+Caution: after a recall attempt the amp's "current slot" pointer can move, so
+later bank-0 block writes may land in that slot. `scx2 recall` is therefore
+read-only: it prints the slot and its blocks.
+
+## Reports the amp sends by itself
+
+Captured on hardware (2026-11-03, firmware `May 30 2013`) with `scx2 monitor`,
+without asking the amp for anything. Turning a front-panel knob streams one
+report per step:
+
+```text
+05 01 02 53 00 00 00 0c 00 2d 2d    volume is now 0x2d
+05 01 02 53 00 01 01 0c 00 fe fe    gain is now 0xfe
+```
+
+| Offset | Meaning |
+| --- | --- |
+| 2 | `0x02` for an amp parameter |
+| 3..5 | current amp model id, little endian |
+| 5, 6 | parameter index (direct-control numbering), repeated |
+| 7 | selector, `0x0c` for amp parameters |
+| 9..11 | value, 16-bit little endian; `round(value / 257)` is the block byte |
+
+This is the direct-control frame with direction byte `0x01` instead of `0xc3`.
+Only volume and gain have been seen this way so far. The field names match
+[OpenFUSE](https://github.com/dbarbashov/openfuse)'s reading of FUSE 2.7.1, which
+is where the `KnobPosition` meaning of `1d` below comes from.
+
+Other reports:
+
+| Report | Meaning | Status |
+| --- | --- | --- |
+| `00 00 05 <status>` | answer to a direct-control write, about 1 ms later; 0 means accepted. The value is not echoed | measured |
+| `05 01 <module> <model lo> <model hi> <index> <index> 01 00 <value lo> <value hi>` | one effect parameter; `<module>` was 5 for delay and 6 for reverb, `<index>` is block offset `32 + index`, and `round(value / 257)` is the byte | decoded from the capture |
+| `1d 01 <index> <position>` | selector knob position (`index` 1/2, positions 6/5 with `'65 Deluxe` live) | sent at the end of a dump; whether they also arrive when the knob turns is untested |
+| `1f 01 00 <n> ...` | state summary before the block stream; the payload after the marker is not decoded | marker known, payload unknown |
+
+`ff c5`, which FUSE uses to ask for the current preset only, returns the full
+dump on this amp (195 reports, about 1.9 s), so a dump is always the slow path.
+The live buffer does come first, within the first few reports.
+
 ## Still unknown
 
-* **Storing a preset.** There must be a "write to slot" command; FUSE sends it
-  after you press save. Writing bank 0 only changes the live sound, and a
-  power cycle discards it.
 * **Meaning of the parameter bytes.** Offsets 32+ hold the amp parameters in
   some order (gain, volume, treble, bass, ...). Map them by turning one knob at
   a time while `scx2 learn` is running.
-* **Renaming a preset.** The name lives in the `0x04` block; whether writing it
-  back with the execute frame renames a stored slot is untested.
-* **The trailing notification reports**: `05 01 05 2b ...`, `05 01 06 24 ...`,
-  `1d 01 01 ...`, `1d 01 02 07 ...` and `1f 01 00 24 ...`. They look like
-  "current fx model" and "global state" announcements.
+* **The payload of the `1f 01` state summary.** The marker and its position
+  before a dump are known, but the bytes after it are not decoded. The
+  `05 01 <module>` effect values and `1d` selector positions are now decoded;
+  see [Reports the amp sends by itself](#reports-the-amp-sends-by-itself).
+
+Storing and renaming are no longer unknown: see
+[Saving a preset](#saving-a-preset). Renaming a stored slot was verified with
+both `scx2 store --name` and a direct `0x04` name block.
 
 ## Recording your own capture
 

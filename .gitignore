@@ -4,3 +4,4 @@
 scx2-dump.json
 backup-*.json
 after*.json
+target-test/

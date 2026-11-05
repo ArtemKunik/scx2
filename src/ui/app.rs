@@ -2,17 +2,20 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eframe::egui;
 use eframe::CreationContext;
 
 use crate::capture;
-use crate::protocol::{self, Dump, BANK_AMP, BANK_FX, BANK_LIVE};
+use crate::protocol::{Dump, BANK_AMP, BANK_FX, BANK_LIVE};
 
+use super::art::Art;
+use super::sync::Activity;
 use super::worker::{spawn_worker, Cmd, Ev};
-use super::{install_style, DEMO_CAPTURE};
+use super::{theme, DEMO_CAPTURE};
 // ---------------------------------------------------------------------------
 // app state
 // ---------------------------------------------------------------------------
@@ -35,11 +38,24 @@ pub struct App {
     pub(crate) banner: Option<String>,
     pub(crate) status: String,
     pub(crate) error: Option<String>,
-    pub(crate) polling: bool,
-    pub(crate) last_live: Option<Dump>,
     pub(crate) flash: BTreeMap<usize, f32>,
-    pub(crate) learn_log: Vec<String>,
+    pub(crate) activity: Vec<Activity>,
+    /// The parameter a person is dragging right now; the amp must not move it.
+    pub(crate) active_offset: Option<usize>,
+    /// False until the first dump from the amp arrives.
+    pub(crate) synced: bool,
+    ctx: egui::Context,
     pub(crate) connecting: bool,
+    pub(crate) show_params: bool,
+    pub(crate) show_fx_params: bool,
+    pub(crate) art: Option<Rc<Art>>,
+    /// Undo/redo snapshots of the whole dump.
+    pub(crate) history: Vec<Dump>,
+    pub(crate) future: Vec<Dump>,
+    /// Consecutive edits inside this window become one undo step.
+    pub(crate) last_edit: Option<Instant>,
+    /// The file last opened or saved, if any.
+    pub(crate) path: Option<PathBuf>,
 }
 
 impl App {
@@ -48,7 +64,7 @@ impl App {
         from: Option<PathBuf>,
         path: Option<String>,
     ) -> Self {
-        install_style(&cc.egui_ctx);
+        theme::install(&cc.egui_ctx);
 
         let mut app = App {
             dump: Dump::new(),
@@ -69,6 +85,10 @@ impl App {
                     label: "Treble".into(),
                 },
                 Knob {
+                    offset: 37,
+                    label: "Middle".into(),
+                },
+                Knob {
                     offset: 38,
                     label: "Bass".into(),
                 },
@@ -81,13 +101,21 @@ impl App {
             rx: None,
             connected: false,
             banner: None,
-            status: "offline".into(),
+            status: "Not connected".into(),
             error: None,
-            polling: false,
-            last_live: None,
             flash: BTreeMap::new(),
-            learn_log: Vec::new(),
+            activity: Vec::new(),
+            active_offset: None,
+            synced: false,
+            ctx: cc.egui_ctx.clone(),
             connecting: false,
+            show_params: false,
+            show_fx_params: false,
+            art: None,
+            history: Vec::new(),
+            future: Vec::new(),
+            last_edit: None,
+            path: None,
         };
 
         if let Some(file) = from {
@@ -104,32 +132,55 @@ impl App {
             Ok(reports) => {
                 self.dump = Dump::from_reports(reports);
                 self.original = self.dump.clone();
-                self.source = "bundled 2021 FUSE capture".into();
-                self.status = "demo capture loaded".into();
+                self.source = "Demo capture from 2021".into();
+                self.status = "Demo presets loaded".into();
+                self.path = None;
+                self.history.clear();
+                self.future.clear();
+                self.last_edit = None;
                 self.pick_default_preset();
             }
             Err(error) => self.error = Some(format!("{error:#}")),
         }
     }
 
+    /// Open a JSON backup or a single-preset FUSE `.fuse` file.
     pub(crate) fn load_file(&mut self, path: &Path) {
-        match std::fs::read_to_string(path)
+        let is_fuse = path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("fuse"));
+        let parsed = std::fs::read_to_string(path)
             .map_err(anyhow::Error::from)
-            .and_then(|text| Dump::from_json(&text).map_err(anyhow::Error::from))
-        {
+            .and_then(|text| {
+                if is_fuse {
+                    crate::fuse::parse(&text).map(Dump::single)
+                } else {
+                    Dump::from_json(&text).map_err(anyhow::Error::from)
+                }
+            });
+        match parsed {
             Ok(dump) => {
                 self.dump = dump;
                 self.original = self.dump.clone();
                 self.source = path.display().to_string();
-                self.status = format!("loaded {}", path.display());
+                self.path = Some(path.to_path_buf());
+                self.history.clear();
+                self.future.clear();
+                self.last_edit = None;
+                self.status = format!("Opened {}", path.display());
                 self.pick_default_preset();
+                if is_fuse && self.connected {
+                    self.send_live_preset();
+                    self.status =
+                        format!("Opened {} and sent it to the live buffer", path.display());
+                }
             }
             Err(error) => self.error = Some(format!("{error:#}")),
         }
     }
 
     pub(crate) fn pick_default_preset(&mut self) {
-        let wanted = [(BANK_AMP, 1u8), (BANK_LIVE, 0), (BANK_FX, 0)];
+        let wanted = [(BANK_LIVE, 0u8), (BANK_AMP, 1), (BANK_FX, 0)];
         for key in wanted {
             if self.dump.get(key.0, key.1).is_some() {
                 self.selected = key;
@@ -144,11 +195,13 @@ impl App {
     pub(crate) fn connect(&mut self, path: Option<String>) {
         let (ev_tx, ev_rx) = channel();
         let (cmd_tx, cmd_rx) = channel();
-        spawn_worker(path, ev_tx, cmd_rx);
+        spawn_worker(path, ev_tx, cmd_rx, self.ctx.clone());
         self.tx = Some(cmd_tx);
         self.rx = Some(ev_rx);
         self.connecting = true;
-        self.status = "connecting...".into();
+        self.synced = false;
+        self.error = None;
+        self.status = "Connecting…".into();
     }
 
     pub(crate) fn pump(&mut self, ctx: &egui::Context) {
@@ -163,83 +216,27 @@ impl App {
                     self.connected = true;
                     self.connecting = false;
                     self.banner = banner;
-                    self.source = "SuperChamp X2  [1ed8:000e]".into();
-                    self.status = "connected".into();
+                    self.source = "Super Champ X2 (1ed8:000e)".into();
+                    self.status = "Connected. Knobs follow the amp.".into();
                 }
-                Ev::Dump(dump) => {
-                    self.handle_live_dump(dump);
-                }
-                Ev::Written(count) => {
-                    self.original = self.dump.clone();
-                    self.status = format!("sent {count} report(s)");
-                }
+                Ev::Dump(dump) => self.on_dump(dump),
+                Ev::Live(live) => self.on_live(*live),
+                Ev::Knob { offset, value } => self.on_knob(offset, value),
+                Ev::Warning(message) => self.error = Some(message),
                 Ev::Error(message) => {
                     self.connected = false;
                     self.connecting = false;
-                    self.status = "offline".into();
+                    self.status = "Not connected".into();
                     self.error = Some(message);
                     self.rx = None;
                 }
             }
         }
         if self.connecting {
-            ctx.request_repaint_after(Duration::from_millis(150));
-        }
-        if self.polling {
-            ctx.request_repaint_after(Duration::from_millis(200));
+            ctx.request_repaint_after(Duration::from_millis(50));
         }
         if !self.flash.is_empty() {
             ctx.request_repaint_after(Duration::from_millis(33));
-        }
-    }
-
-    pub(crate) fn handle_live_dump(&mut self, dump: Dump) {
-        if self.polling {
-            if let (Some(previous), Some(current)) =
-                (self.last_live.as_ref().and_then(Dump::live), dump.live())
-            {
-                let changes = protocol::diff_presets(previous, current);
-                for change in &changes {
-                    if change.offset >= protocol::OFF_PARAMS {
-                        self.flash.insert(change.offset, 1.4);
-                    }
-                }
-                if !changes.is_empty() {
-                    let mut line = String::new();
-                    for change in changes.iter().take(6) {
-                        line.push_str(&format!("{}  ", change.line()));
-                    }
-                    self.learn_log.push(line);
-                    if self.learn_log.len() > 8 {
-                        self.learn_log.remove(0);
-                    }
-                }
-            }
-            self.last_live = Some(dump.clone());
-            // Do not clobber local edits while polling.
-            if protocol::diff_dumps(&self.original, &self.dump).is_empty() {
-                self.dump = dump;
-                self.original = self.dump.clone();
-            }
-            return;
-        }
-
-        self.dump = dump;
-        self.original = self.dump.clone();
-        self.last_live = Some(self.dump.clone());
-        self.pick_default_preset();
-    }
-
-    pub(crate) fn toggle_poll(&mut self) {
-        self.polling = !self.polling;
-        if let Some(tx) = &self.tx {
-            let _ = tx.send(Cmd::Poll(self.polling));
-        }
-        if self.polling {
-            self.learn_log.clear();
-            self.status = "learning: turn one knob on the amp".into();
-        } else {
-            self.status = "learning stopped".into();
         }
     }
 

@@ -109,6 +109,17 @@ pub fn index_for_offset(offset: usize) -> Option<u8> {
     }
 }
 
+/// Block offset of a direct-control parameter index.
+pub fn offset_for_index(index: u8) -> Option<usize> {
+    match index {
+        0x00..=0x0b => Some(32 + index as usize),
+        0x11 => Some(49),
+        0x13 => Some(51),
+        0x14 => Some(52),
+        _ => None,
+    }
+}
+
 /// The amp stores a parameter byte as `round(magic / 257)`.
 pub fn magic_from_byte(value: u8) -> u16 {
     value as u16 * 257
@@ -118,14 +129,14 @@ pub fn magic_from_byte(value: u8) -> u16 {
 pub struct KnobSpec {
     pub offset: usize,
     pub name: &'static str,
-    /// Present on the amp's front panel and in the original FUSE view.
+    /// Shown by the original FUSE editor. All but Middle are also on the amp's panel.
     pub standard: bool,
     /// What the parameter seems to do. Hidden entries are educated guesses
     /// based on the Mustang parameter map in `docs/reference/amp.h`.
     pub hint: &'static str,
 }
 
-/// The five knobs the real amp (and FUSE) shows, then the parameters that
+/// The knobs FUSE shows (the amp's five plus Middle), then the parameters that
 /// only direct control can reach.
 pub const KNOBS: &[KnobSpec] = &[
     KnobSpec {
@@ -145,6 +156,12 @@ pub const KNOBS: &[KnobSpec] = &[
         name: "Treble",
         standard: true,
         hint: "High-frequency tone control.",
+    },
+    KnobSpec {
+        offset: 37,
+        name: "Middle",
+        standard: true,
+        hint: "Midrange tone control. FUSE offers it; the amp's panel has no knob for it.",
     },
     KnobSpec {
         offset: 38,
@@ -169,12 +186,6 @@ pub const KNOBS: &[KnobSpec] = &[
         name: "Master",
         standard: false,
         hint: "Guessed: output-stage level; the SCX2 has no master knob.",
-    },
-    KnobSpec {
-        offset: 37,
-        name: "Mid",
-        standard: false,
-        hint: "Guessed: midrange. The SCX2 panel has no mid knob.",
     },
     KnobSpec {
         offset: 39,
@@ -238,7 +249,7 @@ pub fn offset_label(offset: usize) -> Option<&'static str> {
         34 => Some("gain 2"),
         35 => Some("master"),
         36 => Some("treble"),
-        37 => Some("mid"),
+        37 => Some("middle"),
         38 => Some("bass"),
         39 => Some("presence"),
         40 => Some("amp 8"),

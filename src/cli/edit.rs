@@ -142,6 +142,123 @@ pub(crate) fn apply(
     Ok(())
 }
 
+/// Show a stored preset and explain the SCX2's recall limitation.
+///
+/// Verified on hardware: the SCX2 has no host preset-load opcode. FUSE's
+/// `1c 01 01` frame makes the amp stream its **current** state (a read), and
+/// type bytes `0x00`, `0x02` and `0x04` get no reply. Writing a preset's blocks
+/// to bank 0 is not a substitute: on this amp that edits the currently selected
+/// preset slot, which can overwrite stored memory. The front-panel preset knob
+/// is the only way to recall.
+///
+/// The command is therefore read-only: it prints the slot and its blocks.
+pub(crate) fn recall(bank: u8, slot: u8, path: Option<&str>) -> Result<()> {
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    let dump = amp.read_dump()?;
+    let preset = dump
+        .get(bank, slot)
+        .with_context(|| format!("no preset {bank}:{slot} in the dump"))?;
+
+    println!("[{} {}] {:?}", bank, slot, preset.name);
+    for message in preset.messages() {
+        println!("  {}", message.summary());
+    }
+    println!(
+        "The SCX2 has no host recall: `1c 01 01` is a state read, and the front-panel preset knob is the only way to load a slot. Nothing was written."
+    );
+    Ok(())
+}
+
+/// Rename a stored preset by writing its `0x04` name block.
+///
+/// Verified on hardware: writing the name block with the execute frame changes
+/// the stored slot's name (tested on `fx 15` and `amp 15`). The command prints
+/// the exact frame and only sends with `--yes`.
+pub(crate) fn rename(name: &str, bank: u8, index: u8, path: Option<&str>, yes: bool) -> Result<()> {
+    let raw = protocol::name_change(bank, index, name);
+    let frame = protocol::as_host_frame(&raw, protocol::HOST_CONTROL);
+    println!(
+        "rename bank {bank} index {index} to {:?}",
+        name.chars().take(protocol::NAME_LEN).collect::<String>()
+    );
+    println!("frame: {}", protocol::hex(&frame));
+    if !yes {
+        println!("dry run, add --yes to transmit");
+        return Ok(());
+    }
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    amp.write_report(&frame)?;
+    amp.write_report(&protocol::execute_model_change())?;
+    println!("sent name block + execute frame");
+    Ok(())
+}
+
+/// Bypass or enable a loaded effect with FUSE's fast frame.
+///
+/// Verified on hardware: `19 c3 <family> <state> <slot>` changes block offset
+/// 22 and toggling it back restores it. No execute frame is needed.
+pub(crate) fn bypass(kind: &str, slot: u8, off: bool, path: Option<&str>, yes: bool) -> Result<()> {
+    let kind = Kind::parse(kind)
+        .filter(|kind| kind.has_slot())
+        .with_context(|| {
+            format!("effect kind must be stomp, mod, delay or reverb, got {kind:?}")
+        })?;
+    let frame = protocol::bypass(kind, slot, off);
+    println!(
+        "{} {} slot {slot}",
+        if off { "bypass" } else { "enable" },
+        kind.label()
+    );
+    println!("frame: {}", protocol::hex(&frame));
+    if !yes {
+        println!("dry run, add --yes to transmit");
+        return Ok(());
+    }
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    amp.write_report(&frame)?;
+    println!("sent");
+    Ok(())
+}
+
+/// Store the live buffer into a preset slot.
+///
+/// Uses FUSE's save-preset frame (`1c 01 03 ...`): the amp writes its current
+/// live buffer into `bank`/`index` under `name`. Byte 3 is the bank, which is
+/// what the SCX2 uses; FUSE always writes 0 because a Mustang has one flat
+/// preset list. The command prints the exact frame and only sends with `--yes`.
+pub(crate) fn store(
+    bank: u8,
+    index: u8,
+    name: Option<&str>,
+    path: Option<&str>,
+    yes: bool,
+) -> Result<()> {
+    let name = name.unwrap_or("");
+    let frame = protocol::save_preset(bank, index, name);
+
+    println!("store live buffer into bank {bank} index {index} as {name:?}");
+    println!("frame: {}", protocol::hex(&frame));
+    println!(
+        "Verify with `scx2 dump` afterwards; only a power cycle proves the slot is persistent."
+    );
+    if !yes {
+        println!("dry run, add --yes to transmit");
+        return Ok(());
+    }
+    let amp = transport::Amp::open(path)?;
+    println!("connected: {}", amp.describe()?);
+    amp.handshake()?;
+    amp.write_report(&frame)?;
+    println!("sent save frame");
+    Ok(())
+}
+
 pub(crate) fn restore(
     file: &Path,
     path: Option<&str>,

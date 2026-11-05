@@ -1,12 +1,16 @@
 # Parameter map
 
 Amp blocks (kind `0x05`) carry 32 parameter bytes at offsets 32..63. The amp
-front panel only exposes five of them; the rest are reachable through the
+front panel only exposes five of them, FUSE adds Middle; the rest are reachable through the
 Mustang-style direct-control frame (`scx2 param` / `scx2 probe`).
 
 Everything below was measured on a Super Champ X2 (fw `May 30 2013`) with
 `scx2 probe --from 0 --to 20 --value 64 --yes`, which writes each parameter
 and reports the block offsets that changed.
+
+The protocol always carries a raw byte (`0..255`), but the editor displays
+every knob and parameter cell on a **0–10 scale** (`byte / 255 * 10`) so it
+matches the amp's front panel. The byte sent to the amp is unchanged.
 
 ## Direct-control map
 
@@ -17,7 +21,7 @@ and reports the block offsets that changed.
 | `0x02` | 34 | Gain 2 | no | second gain stage |
 | `0x03` | 35 | Master | no | output level |
 | `0x04` | 36 | Treble | yes | tone stack |
-| `0x05` | 37 | Mid | no | tone stack |
+| `0x05` | 37 | Middle | no, FUSE only | tone stack, set per voice |
 | `0x06` | 38 | Bass | yes | tone stack |
 | `0x07` | 39 | Presence | no | power-amp feedback |
 | `0x08` | 40 | Amp 8 | no | undocumented; writes cleanly |
@@ -37,13 +41,13 @@ threshold and are written as a block too.
 
 ### Guessed hidden knobs
 
-The editor offers the five front-panel knobs by default and puts the rest
-behind the `+ knob` menu. Their hints are guesses based on the Mustang
+The editor shows the five front-panel knobs plus Middle by default and puts the rest
+behind the `+` menu on the panel. Their hints are guesses based on the Mustang
 parameter names in `docs/reference/amp.h`:
 
 - **Gain 2** - second gain stage, used by the Supersonic-style voices.
 - **Master** - output-stage level; the SCX2 has no master knob.
-- **Mid**, **Presence** - tone controls the SCX2 panel omits.
+- **Presence** - tone control the SCX2 panel omits.
 - **Amp 8** - no Mustang equivalent; possibly a resonance/presence trim.
 - **Gate depth**, **Gate threshold** - noise gate.
 - **Bias**, **Sag**, **Bright** - power-amp behaviour.
@@ -90,8 +94,39 @@ is expected and excluded from `scx2 diff` output.
 ## Other blocks
 
 Every block repeats the same layout: `slot` at 18, model id at 16, parameters
-from 32. The stomp/mod/delay/reverb meanings are still unmapped; `scx2 learn`
-is the tool for that (turn a knob on the amp, watch which offsets move).
+from 32. FUSE gives every effect model a six-slot parameter list, and the names
+below are the ones FUSE itself uses. The names are **not yet verified on SCX2
+hardware**; `scx2 learn` is still the way to confirm them. The bypass byte
+(offset 22) *is* verified: `scx2 bypass` toggles it with FUSE's `19 c3` frame,
+and a dump shows `0` for on and `1` for bypassed.
+
+| Model | Block | Offsets 32..37 |
+| --- | --- | --- |
+| Compressor `0x0007` | stomp | Level, Thresh, Ratio, Attack, Release |
+| Overdrive `0x003c` | stomp | Level, Gain, Low, Mid, High |
+| Green Box `0x00ba` | stomp | Level, Gain, Tone, Blend |
+| Sine Chorus `0x0012` | mod | Level, Rate, Depth, Avg Dly, LR Phase |
+| Vibratone `0x002d` | mod | Level, Rotor, Depth, Fdbk, LR Phase |
+| Sine Tremolo `0x0041` | mod | Level, Rate, Duty, LFO Clip, Tri Shape |
+| Phaser `0x004f` | mod | Level, Rate, Depth, Fdbk, Shape |
+| Mono Delay `0x0016` | delay | Level, Time, Fdbk, Bright, Atten |
+| Tape Delay `0x002b` | delay | Level, Time, Fdbk, Flutter, Bright, Stereo |
+| Spring '65 `0x000b` | reverb | Level, Decay, Dwell, Diff, Tone |
+| Small Hall `0x0024` | reverb | Level, Decay, Dwell, Diff, Tone |
+
+The full table lives in `src/models.rs` (`effect_params`), and it covers every
+model in the Mustang-wide list, not only the ones this capture happened to use.
+
+The editor makes these blocks editable: click an effect slot to choose a model
+(or clear it with `None`), drag the knobs drawn on the pedal, or open **Effect
+Parameters** for all 32 bytes. Loading a model gives it that model's default
+parameter bytes: FUSE's captured defaults where they are known, otherwise a
+neutral `0x80` in every slot the model uses. A model that is not in the default
+table therefore no longer inherits the previous effect's settings.
+
+Loading a model into a preset that does not carry that block creates a frame
+with the preset's bank/index and the observed default slot for the effect kind;
+the live buffer always has all four blocks.
 
 ## How to read a block
 

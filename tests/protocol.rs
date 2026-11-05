@@ -16,6 +16,64 @@ fn loaded_dump() -> Dump {
 }
 
 #[test]
+fn recall_frames_carry_a_bank_and_slot() {
+    let amp = protocol::patch_change(7);
+    assert_eq!((amp[0], amp[1], amp[2]), (0x1c, 0x01, 0x01));
+    assert_eq!((amp[3], amp[4]), (0, 7));
+
+    let fx = protocol::recall_preset(BANK_FX, 3);
+    assert_eq!((fx[3], fx[4]), (BANK_FX, 3));
+}
+
+#[test]
+fn a_name_block_is_nul_padded_and_retargetable() {
+    let raw = protocol::name_change(BANK_AMP, 4, "Tweed");
+    assert_eq!(raw[2], Kind::Name.code());
+    assert_eq!((raw[3], raw[4]), (BANK_AMP, 4));
+    assert_eq!(&raw[16..21], b"Tweed");
+    assert!(raw[21..48].iter().all(|byte| *byte == 0));
+
+    let mut block = [0u8; protocol::REPORT_SIZE];
+    block[0] = 0x1c;
+    block[1] = 0x01;
+    block[2] = Kind::Stomp.code();
+    block[16] = 0xba;
+    block[32] = 0x42;
+    let moved = protocol::retarget(&block, BANK_AMP, 9);
+    assert_eq!((moved[3], moved[4]), (BANK_AMP, 9));
+    assert_eq!(moved[16], 0xba);
+    assert_eq!(moved[32], 0x42);
+}
+
+#[test]
+fn the_save_frame_carries_a_bank_slot_and_name() {
+    let frame = protocol::save_preset(BANK_FX, 15, "Saved");
+    assert_eq!((frame[0], frame[1], frame[2]), (0x1c, 0x01, 0x03));
+    assert_eq!((frame[3], frame[4]), (BANK_FX, 15));
+    assert_eq!((frame[6], frame[7]), (0x01, 0x01));
+    assert_eq!(&frame[16..21], b"Saved");
+    assert!(frame[21..48].iter().all(|byte| *byte == 0));
+
+    let amp = protocol::save_preset(BANK_AMP, 7, "Amp");
+    assert_eq!((amp[3], amp[4]), (BANK_AMP, 7));
+}
+
+#[test]
+fn the_bypass_frame_uses_kind_minus_three() {
+    let reverb = protocol::bypass(Kind::Reverb, 5, true);
+    assert_eq!(
+        (reverb[0], reverb[1], reverb[2], reverb[3], reverb[4]),
+        (0x19, protocol::HOST_CONTROL, 6, 1, 5)
+    );
+    let stomp = protocol::bypass(Kind::Stomp, 3, false);
+    assert_eq!((stomp[2], stomp[3], stomp[4]), (3, 0, 3));
+    let delay = protocol::bypass(Kind::Delay, 1, true);
+    assert_eq!(delay[2], 5);
+    let modulation = protocol::bypass(Kind::Mod, 4, false);
+    assert_eq!(modulation[2], 4);
+}
+
+#[test]
 fn capture_is_a_complete_dump() {
     let dump = loaded_dump();
     assert!(dump.ended, "the capture ends with the amp acknowledgement");

@@ -122,6 +122,51 @@ Restore is the same mechanism as `apply`, just for every block. Do not run it
 with `--yes` until `apply` has been confirmed, otherwise you will be writing
 172 unverified frames into preset memory.
 
+## 7. Verify the new effect map and the save path
+
+The effect parameter names/defaults now come from FUSE's model table. They are
+consistent with the capture but not yet proven on the SCX2:
+
+1. Load a known effect (for example Overdrive) into the live buffer.
+2. Open **Effect Parameters** and compare the labels with FUSE's editor.
+3. Turn one knob at a time and run `scx2 learn`; record which offset moves.
+4. Repeat for a delay (Time, Fdbk, Flutter) and a reverb (Level, Decay, Dwell).
+
+### Save and rename: verified 2026-11-04
+
+The save frame was confirmed on hardware against `fx 15` (empty, `NONE`) and
+`amp 15`, then both slots were restored from the pre-write backup:
+
+```console
+scx2 dump -o before-store.json
+scx2 store --bank 2 --index 15 --name "SCX2 TEST"          # prints the frame
+scx2 store --bank 2 --index 15 --name "SCX2 TEST" --yes
+scx2 dump -o after-store.json                              # fx 15 renamed
+scx2 rename "Another name" --bank 2 --index 15 --yes       # name block only
+```
+
+The save frame is `1c 01 03 <bank> <index> 00 01 01 <name>`. A stored slot also
+accepts a direct block write (`1c c3 ...` + `1c 03`), which is how the original
+bytes were put back.
+
+### Recall: no host command
+
+The SCX2 treats FUSE's `1c 01 01 <bank> <slot> 00 01` as a state read; type
+bytes `0x00`, `0x02` and `0x04` get no reply. The front-panel preset knob is the
+only way to load a slot. Do **not** write a preset's blocks to bank 0 to fake a
+recall: on this amp that edits the currently selected preset slot and can
+overwrite stored memory. `scx2 recall` is read-only for that reason.
+
+### Persistence: verified 2026-11-04
+
+A marker was saved into `fx 15`, the amp was powered off and back on, and
+`scx2 dump` still reported `fx 15` as `PERSIST TEST`. The save path therefore
+reaches flash, not just RAM. The slot was then restored to `NONE`.
+
+`.fuse` round-trips are offline and already covered by `cargo test`; a useful
+hardware check is to import a FUSE preset, send it to the live buffer with the
+editor, and confirm the amp reports the same models and parameter bytes.
+
 ## What to send back
 
 * the output of `scan` and `dump`

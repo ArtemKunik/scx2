@@ -27,6 +27,8 @@
 //!  32..64  parameters         8-bit, 0x80 = centre for bipolar values
 //! ```
 
+pub use notice::{classify, Notice};
+
 pub const VENDOR_ID: u16 = 0x1ED8;
 pub const PRODUCT_ID: u16 = 0x000E;
 
@@ -59,13 +61,14 @@ mod dump;
 mod frames;
 mod kind;
 mod message;
+mod notice;
 mod preset;
 
 pub use diff::{diff_dumps, diff_presets, Change};
 pub use dump::Dump;
 pub use frames::{
-    as_host_frame, boot_banner, execute_model_change, handshake_step1, handshake_step2, hex,
-    parse_hex, patch_change, request_dump,
+    as_host_frame, boot_banner, bypass, execute_model_change, handshake_step1, handshake_step2,
+    hex, name_change, parse_hex, patch_change, recall_preset, request_dump, retarget, save_preset,
 };
 pub use kind::Kind;
 pub use message::Message;

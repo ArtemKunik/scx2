@@ -94,18 +94,300 @@ pub const REVERB_MODELS: &[(u16, &str)] = &[
     (0x000b, "Spring '65"),
 ];
 
-/// Look up a model name for a block kind.
-pub fn model_name(kind: Kind, id: u16) -> Option<&'static str> {
-    let table = match kind {
+/// The model table a block kind chooses from, `None` for blocks without one.
+///
+/// The first entry is always `(0, "None")`, which is how an empty effect slot
+/// is represented on the wire.
+pub fn table(kind: Kind) -> Option<&'static [(u16, &'static str)]> {
+    Some(match kind {
         Kind::Amp => AMP_MODELS,
         Kind::Stomp => STOMP_MODELS,
         Kind::Mod => MOD_MODELS,
         Kind::Delay => DELAY_MODELS,
         Kind::Reverb => REVERB_MODELS,
         _ => return None,
-    };
-    table
+    })
+}
+
+/// Look up a model name for a block kind.
+pub fn model_name(kind: Kind, id: u16) -> Option<&'static str> {
+    table(kind)?
         .iter()
         .find(|(model, _)| *model == id)
         .map(|(_, name)| *name)
+}
+
+// ---------------------------------------------------------------------------
+// effect parameter names
+// ---------------------------------------------------------------------------
+//
+// FUSE describes every DSP model with a fixed six-slot parameter list. The
+// names below come from FUSE's own model definitions (the same table the
+// `refuse` project publishes); they are not yet verified against SCX2
+// hardware, but they are the real control names rather than artwork.
+//
+// An empty string means the model does not use that slot. The number of
+// leading non-empty entries is the model's knob count.
+
+const LEVEL_TIME_FDBK_BRIGHT_ATTEN: &[&str] = &["Level", "Time", "Fdbk", "Bright", "Atten", ""];
+const LEVEL_RATE_DEPTH_AVG_PHASE: &[&str] = &["Level", "Rate", "Depth", "Avg Dly", "LR Phase", ""];
+const LEVEL_RATE_DEPTH_FDBK_PHASE: &[&str] = &["Level", "Rate", "Depth", "Fdbk", "LR Phase", ""];
+const REVERB: &[&str] = &["Level", "Decay", "Dwell", "Diff", "Tone", ""];
+const DRIVE: &[&str] = &["Level", "Gain", "Low", "Mid", "High", ""];
+const WAH: &[&str] = &["Level", "Freq", "Min", "Max", "Q", ""];
+const TOUCH_WAH: &[&str] = &["Level", "Sens", "Min", "Max", "Q", ""];
+const COMPRESSOR: &[&str] = &["Level", "Thresh", "Ratio", "Attack", "Release", ""];
+const PITCH: &[&str] = &["Level", "Pitch", "Detune", "Fdbk", "PreDly", ""];
+
+/// Parameter labels for an effect model, in block-offset order from 32.
+///
+/// The first entry is offset 32. Unused slots are empty strings, so callers can
+/// count the non-empty prefix to know how many knobs the model really has.
+pub fn effect_params(kind: Kind, model: u16) -> &'static [&'static str] {
+    match (kind, model) {
+        (Kind::Stomp, 0x003c) => DRIVE,
+        (Kind::Stomp, 0x0049) => WAH,
+        (Kind::Stomp, 0x004a) => TOUCH_WAH,
+        (Kind::Stomp, 0x001a) => &["Level", "Gain", "Octave", "Low", "High", ""],
+        (Kind::Stomp, 0x001c) => &["Level", "Gain", "Sens", "Octave", "Peak", ""],
+        (Kind::Stomp, 0x0088) => &["Type", "", "", "", "", ""],
+        (Kind::Stomp, 0x0007) => COMPRESSOR,
+        (Kind::Stomp, 0x0103) => &["Level", "Gain", "Tone", "", "", ""],
+        (Kind::Stomp, 0x00ba) => &["Level", "Gain", "Tone", "Blend", "", ""],
+        (Kind::Stomp, 0x0110) => &["Level", "Gain", "Tone", "", "", ""],
+        (Kind::Stomp, 0x0111) => &["Level", "Gain", "Tone", "", "", ""],
+        (Kind::Stomp, 0x010f) => &["Level", "Tone", "Sustain", "", "", ""],
+
+        (Kind::Mod, 0x0012 | 0x0013) => LEVEL_RATE_DEPTH_AVG_PHASE,
+        (Kind::Mod, 0x0018 | 0x0019) => LEVEL_RATE_DEPTH_FDBK_PHASE,
+        (Kind::Mod, 0x002d) => &["Level", "Rotor", "Depth", "Fdbk", "LR Phase", ""],
+        (Kind::Mod, 0x0040) => &["Level", "Rate", "Duty", "Attack", "Release", ""],
+        (Kind::Mod, 0x0041) => &["Level", "Rate", "Duty", "LFO Clip", "Tri Shape", ""],
+        (Kind::Mod, 0x0022) => &["Level", "Freq", "Depth", "Shape", "Phase", ""],
+        (Kind::Mod, 0x0029) => &["Level", "Rate", "Res", "Min Freq", "Max Freq", ""],
+        (Kind::Mod, 0x004f) => &["Level", "Rate", "Depth", "Fdbk", "Shape", ""],
+        (Kind::Mod, 0x001f | 0x101f) => PITCH,
+        (Kind::Mod, 0x00f4) => WAH,
+        (Kind::Mod, 0x00f5) => TOUCH_WAH,
+
+        (Kind::Delay, 0x0016) => LEVEL_TIME_FDBK_BRIGHT_ATTEN,
+        (Kind::Delay, 0x0043 | 0x0048) => &["Level", "Time", "Fdbk", "Freq", "Res", "Input"],
+        (Kind::Delay, 0x0044..=0x0046) => LEVEL_TIME_FDBK_BRIGHT_ATTEN,
+        (Kind::Delay, 0x0015) => &["Level", "Time", "Fdbk", "Release", "Thresh", ""],
+        (Kind::Delay, 0x002b) => &["Level", "Time", "Fdbk", "Flutter", "Bright", "Stereo"],
+        (Kind::Delay, 0x002a) => &["Level", "Time", "Fdbk", "Flutter", "Sep", "Bright"],
+
+        (Kind::Reverb, _) => REVERB,
+        _ => &[],
+    }
+}
+
+/// How many of an effect model's parameter slots are used.
+pub fn effect_knobs(kind: Kind, model: u16) -> usize {
+    effect_params(kind, model)
+        .iter()
+        .take_while(|label| !label.is_empty())
+        .count()
+}
+
+// ---------------------------------------------------------------------------
+// factory defaults
+// ---------------------------------------------------------------------------
+//
+// Known six-byte parameter defaults, captured by the FUSE/refuse work. Models
+// without an entry get a neutral 0x80 in every used slot, so loading a model
+// never inherits the previous effect's settings.
+
+const DEFAULTS: &[(Kind, u16, &[u8])] = &[
+    (Kind::Stomp, 0x003c, &[0x80, 0x80, 0x80, 0x80, 0x80]),
+    (Kind::Stomp, 0x0049, &[0xff, 0x80, 0x00, 0xff, 0x00]),
+    (Kind::Stomp, 0x001a, &[0x80, 0x80, 0x80, 0x80, 0x80]),
+    (Kind::Stomp, 0x0088, &[0x01]),
+    (Kind::Stomp, 0x0007, &[0x8d, 0x0f, 0x4f, 0x7f, 0x7f]),
+    (Kind::Stomp, 0x0103, &[0x64, 0xba, 0x01, 0x9b]),
+    (Kind::Stomp, 0x00ba, &[0x81, 0xb1, 0x8c, 0xff]),
+    (Kind::Stomp, 0x0110, &[0x81, 0x81, 0x81]),
+    (Kind::Stomp, 0x0111, &[0x81, 0x81, 0x56]),
+    (Kind::Stomp, 0x010f, &[0xac, 0xac, 0x73]),
+    (Kind::Mod, 0x0012, &[0xff, 0x0e, 0x19, 0x19, 0x80]),
+    (Kind::Mod, 0x0018, &[0xff, 0x0e, 0x80, 0x80, 0x80]),
+    (Kind::Mod, 0x0040, &[0xdb, 0xad, 0x63, 0xf4, 0xf1]),
+    (Kind::Mod, 0x004f, &[0xfd, 0x00, 0xfd, 0xb8, 0x00]),
+    (Kind::Delay, 0x0016, &[0xff, 0x80, 0x80, 0x80, 0x80]),
+    (Kind::Delay, 0x002b, &[0x7d, 0x1c, 0x00, 0x63, 0x80]),
+    (Kind::Delay, 0x002a, &[0x7d, 0x88, 0x1c, 0x63, 0xff, 0x80]),
+    (Kind::Reverb, 0x0024, &[0x6e, 0x5d, 0x6e, 0x80, 0x91]),
+    (Kind::Reverb, 0x003a, &[0x4f, 0x3e, 0x80, 0x05, 0xb0]),
+    (Kind::Reverb, 0x0026, &[0x80, 0x80, 0x80, 0x80, 0x80]),
+    (Kind::Reverb, 0x004b, &[0x38, 0x80, 0x91, 0x80, 0xb6]),
+    (Kind::Reverb, 0x000b, &[0x80, 0x8b, 0x49, 0xff, 0x80]),
+];
+
+/// Default parameter bytes (block offsets 32..63) for an effect model.
+pub fn default_params(kind: Kind, model: u16) -> Option<[u8; 32]> {
+    let labels = effect_params(kind, model);
+    if labels.is_empty() {
+        return None;
+    }
+    let mut params = [0u8; 32];
+    match DEFAULTS
+        .iter()
+        .find(|(entry_kind, entry_model, _)| *entry_kind == kind && *entry_model == model)
+    {
+        Some((_, _, values)) => params[..values.len()].copy_from_slice(values),
+        None => {
+            for (index, label) in labels.iter().enumerate() {
+                if !label.is_empty() {
+                    params[index] = 0x80;
+                }
+            }
+        }
+    }
+    Some(params)
+}
+
+// ---------------------------------------------------------------------------
+// FUSE XML ids
+// ---------------------------------------------------------------------------
+//
+// A `.fuse` preset refers to models by FUSE's own integer ids, which are not
+// the DSP model ids. This table is the mapping FUSE uses.
+
+const FUSE_IDS: &[(Kind, u16, u32)] = &[
+    (Kind::Amp, 0x0067, 0),
+    (Kind::Amp, 0x0064, 1),
+    (Kind::Amp, 0x007c, 2),
+    (Kind::Amp, 0x0053, 3),
+    (Kind::Amp, 0x006a, 4),
+    (Kind::Amp, 0x0075, 5),
+    (Kind::Amp, 0x0072, 6),
+    (Kind::Amp, 0x0061, 7),
+    (Kind::Amp, 0x0079, 8),
+    (Kind::Amp, 0x005e, 9),
+    (Kind::Amp, 0x005d, 10),
+    (Kind::Amp, 0x006d, 11),
+    (Kind::Amp, 0x00f1, 100),
+    (Kind::Amp, 0x00f6, 101),
+    (Kind::Amp, 0x00f9, 102),
+    (Kind::Amp, 0x00ff, 103),
+    (Kind::Amp, 0x00fc, 104),
+    (Kind::Stomp, 0x003c, 19),
+    (Kind::Stomp, 0x0049, 20),
+    (Kind::Stomp, 0x004a, 21),
+    (Kind::Stomp, 0x001a, 22),
+    (Kind::Stomp, 0x001c, 23),
+    (Kind::Stomp, 0x0007, 24),
+    (Kind::Stomp, 0x0088, 25),
+    (Kind::Stomp, 0x0103, 109),
+    (Kind::Stomp, 0x00ba, 110),
+    (Kind::Stomp, 0x0110, 111),
+    (Kind::Stomp, 0x0111, 112),
+    (Kind::Stomp, 0x010f, 113),
+    (Kind::Mod, 0x0012, 26),
+    (Kind::Mod, 0x0013, 27),
+    (Kind::Mod, 0x0018, 28),
+    (Kind::Mod, 0x0019, 29),
+    (Kind::Mod, 0x002d, 30),
+    (Kind::Mod, 0x0040, 31),
+    (Kind::Mod, 0x0041, 32),
+    (Kind::Mod, 0x0022, 33),
+    (Kind::Mod, 0x0029, 34),
+    (Kind::Mod, 0x004f, 35),
+    (Kind::Mod, 0x001f, 36),
+    (Kind::Delay, 0x0016, 37),
+    (Kind::Delay, 0x002b, 38),
+    (Kind::Delay, 0x0015, 39),
+    (Kind::Delay, 0x0046, 40),
+    (Kind::Delay, 0x0048, 41),
+    (Kind::Reverb, 0x0024, 42),
+    (Kind::Reverb, 0x003a, 43),
+    (Kind::Reverb, 0x0026, 44),
+    (Kind::Reverb, 0x003b, 45),
+    (Kind::Reverb, 0x004e, 46),
+    (Kind::Reverb, 0x004b, 47),
+    (Kind::Reverb, 0x004c, 48),
+    (Kind::Reverb, 0x004d, 49),
+    (Kind::Reverb, 0x0021, 50),
+    (Kind::Reverb, 0x000b, 51),
+];
+
+/// The FUSE XML id for a model, if FUSE knows it.
+pub fn fuse_id(kind: Kind, model: u16) -> Option<u32> {
+    FUSE_IDS
+        .iter()
+        .find(|(entry_kind, entry_model, _)| *entry_kind == kind && *entry_model == model)
+        .map(|(_, _, id)| *id)
+}
+
+/// Resolve a FUSE XML model id, including the duplicate ids FUSE used for the
+/// V2 re-issues (105..108 for the Deluxe/Princeton/Twin/Super-Sonic).
+pub fn from_fuse_id(kind: Kind, id: u32) -> Option<u16> {
+    if let Some((_, model, _)) = FUSE_IDS
+        .iter()
+        .find(|(entry_kind, _, entry_id)| *entry_kind == kind && *entry_id == id)
+    {
+        return Some(*model);
+    }
+    match (kind, id) {
+        (Kind::Amp, 105) => Some(0x0053),
+        (Kind::Amp, 106) => Some(0x006a),
+        (Kind::Amp, 107) => Some(0x0075),
+        (Kind::Amp, 108) => Some(0x0072),
+        _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// what this SCX2 actually reported
+// ---------------------------------------------------------------------------
+
+/// Effect models that appear in the bundled SCX2 capture.
+///
+/// The picker uses this only as an annotation: the Mustang-wide tables are
+/// still offered, because a model that FUSE can load may work even if this one
+/// capture never used it.
+pub const OBSERVED: &[(Kind, u16)] = &[
+    (Kind::Stomp, 0x0007),
+    (Kind::Mod, 0x0012),
+    (Kind::Mod, 0x002d),
+    (Kind::Mod, 0x0041),
+    (Kind::Delay, 0x0016),
+    (Kind::Delay, 0x002b),
+    (Kind::Reverb, 0x000b),
+    (Kind::Reverb, 0x0024),
+    (Kind::Reverb, 0x003a),
+    (Kind::Reverb, 0x003b),
+];
+
+/// Whether the bundled SCX2 capture contains this effect model.
+pub fn observed(kind: Kind, model: u16) -> bool {
+    OBSERVED
+        .iter()
+        .any(|(entry_kind, entry_model)| *entry_kind == kind && *entry_model == model)
+}
+
+/// Amp model selected by a voice index (block offsets 44..46); 0 when unknown.
+pub fn voice_model_id(index: u8) -> u16 {
+    match index {
+        0x00 => 0x00eb,
+        0x01 => 0x0067,
+        0x02 => 0x0064,
+        0x03 => 0x0053,
+        0x04 => 0x006a,
+        0x05 => 0x0075,
+        0x06 => 0x0072,
+        0x07 => 0x0061,
+        0x08 => 0x006d,
+        0x09 => 0x005e,
+        0x0a => 0x005d,
+        0x0b => 0x0079,
+        0x0c => 0x007c,
+        0x0d => 0x00ea,
+        _ => 0,
+    }
+}
+
+/// The voice index (block offsets 44..46) that selects an amp model, if known.
+pub fn voice_index(model: u16) -> Option<u8> {
+    (0u8..=0x0d).find(|index| voice_model_id(*index) == model)
 }

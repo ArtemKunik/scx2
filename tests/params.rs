@@ -3,15 +3,15 @@
 use scx2::params::{self, KNOBS};
 
 #[test]
-fn front_panel_knobs_match_the_amp() {
+fn standard_knobs_match_fuse() {
     let standard: Vec<_> = KNOBS.iter().filter(|spec| spec.standard).collect();
     assert_eq!(
         standard.iter().map(|spec| spec.name).collect::<Vec<_>>(),
-        ["Volume", "Gain", "Treble", "Bass", "Voice"]
+        ["Volume", "Gain", "Treble", "Middle", "Bass", "Voice"]
     );
     assert_eq!(
         standard.iter().map(|spec| spec.offset).collect::<Vec<_>>(),
-        [32, 33, 36, 38, 44]
+        [32, 33, 36, 37, 38, 44]
     );
 }
 
