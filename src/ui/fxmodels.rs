@@ -244,7 +244,7 @@ fn rack(name: &'static str, led: Color32) -> Pedal {
 pub(super) fn look(kind: Kind, model: u16) -> Option<Pedal> {
     let fallback = models::model_name(kind, model).unwrap_or("EFFECT");
     let mut pedal = match (kind, model) {
-        (Kind::Stomp, 0x003c) => colored([92, 78, 26], "OVERDRIVE", "DRIVE", 3, DRIVE),
+        (Kind::Stomp, 0x003c) => colored([158, 96, 34], "OVERDRIVE", "DRIVE", 3, DRIVE),
         (Kind::Stomp, 0x0049 | 0x004a | 0x001c) => wah("WAH"),
         (Kind::Stomp, 0x001a) => colored([138, 30, 26], "FUZZ", "FUZZ", 2, COMP),
         (Kind::Stomp, 0x0088 | 0x0007) => silver("COMPRESSOR", "DYNAMICS", 2, COMP),

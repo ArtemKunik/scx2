@@ -178,9 +178,17 @@ pub(super) fn legends(painter: &Painter, unit: Rect, fx: &Pedal) {
     );
 }
 
+/// Where a knob's travel begins and ends, in radians from the +x axis.
+///
+/// Real pedal knobs stop at about 7 o'clock and 4 o'clock: a 270-degree sweep
+/// through 12 o'clock, not a free spin. Screen coordinates grow downwards, so
+/// clockwise is an increasing angle.
+pub(super) const KNOB_START: f32 = 3.0 * std::f32::consts::FRAC_PI_4;
+pub(super) const KNOB_SWEEP: f32 = 3.0 * std::f32::consts::FRAC_PI_2;
+
 /// Map a parameter byte to the pointer angle on a small knob.
 pub(super) fn knob_angle(value: u8) -> f32 {
-    -2.35 + value as f32 / 255.0 * 4.7
+    KNOB_START + value as f32 / 255.0 * KNOB_SWEEP
 }
 
 pub(super) fn knob_row(painter: &Painter, fx: &Pedal, unit: Rect, values: &[u8]) {
@@ -200,9 +208,9 @@ pub(super) fn knob_row(painter: &Painter, fx: &Pedal, unit: Rect, values: &[u8])
                 control.center + Vec2::new(0.0, control.radius + 4.0),
                 Align2::CENTER_TOP,
                 label,
-                super::theme::semibold(5.4),
+                super::theme::semibold(6.2),
                 fx.ink.gamma_multiply(0.8),
-                0.8,
+                0.9,
             );
         }
     }
@@ -240,5 +248,24 @@ pub(super) fn reels(painter: &Painter, window: Rect, body: Color32) {
                 stroke(1.2, Color32::from_rgb(128, 124, 112)),
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{knob_angle, KNOB_START, KNOB_SWEEP};
+
+    #[test]
+    fn a_knob_turns_through_exactly_270_degrees() {
+        let start = knob_angle(0);
+        let end = knob_angle(255);
+        assert!(
+            (start - KNOB_START).abs() < 1e-6,
+            "a knob at zero points to 7 o'clock"
+        );
+        assert!(
+            ((end - start) - KNOB_SWEEP).abs() < 1e-5,
+            "full travel is 270 degrees"
+        );
     }
 }

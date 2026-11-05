@@ -72,17 +72,20 @@ metal), and each effect model gets its own hardware face - a stompbox, wah
 treadle, tape echo, spring reverb tank or rack processor - with knobs that sit
 where the parameter bytes put them.
 
-The four effect slots are editable too: click a slot to load or change its
-effect, drag the knobs drawn on the pedal to change that effect's parameters,
-and right-click (or hover and press the `x`) to clear it. A loaded effect has
-an **ON/OFF** pill in its slot header: it bypasses the effect without unloading
-it, so the model and every knob setting stay exactly where they were. The knob
-names now come from FUSE's own model table (Level, Time, Fdbk, Depth, Mix and
-so on), and loading a model gives it that model's default parameter bytes
-instead of inheriting the previous effect's settings.
+The four effect slots are editable too: click any slot to open a focused editor
+for that pedal. The pedal is drawn large, and every parameter gets its own
+control in a rack beside it, with the FUSE name above and the 0–10 value below.
+Drag a control or scroll over it; hold Shift for fine control and double-click
+to reset one control. The model list is one click away, and right-clicking a
+slot (or hovering and pressing the `x`) clears it. A loaded effect has an
+**ON/OFF** pill in its slot header: it bypasses the effect without unloading
+it, so the model and every setting stay exactly where they were. The knob names
+come from FUSE's own model table (Level, Time, Fdbk, Depth, Mix and so on), and
+loading a model gives it that model's default parameter bytes instead of
+inheriting the previous effect's settings.
 
-Open **Effect Parameters** for the complete editor: all 32 parameters of every
-effect block, with the FUSE name for the slots the model uses. Each loaded
+Open **Effect Parameters** for the raw byte view of every effect block: all 32
+parameters, with the FUSE name for the slots the model uses. Each loaded
 effect also has a **Bypass** toggle (offset 22, FUSE's `BypassState`, verified
 on hardware). The names and defaults come from FUSE's model table and are not
 yet verified by ear, so the panel says so; `scx2 learn` is the way to confirm

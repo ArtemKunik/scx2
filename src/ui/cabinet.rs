@@ -251,12 +251,20 @@ impl App {
             knob_anchor.as_ref()
         };
         let popup = Id::new("amp-picker");
+        if picker_open {
+            ui.memory_mut(|memory| memory.toggle_popup(popup));
+        }
         // Dim and block the editor while the chooser is open. Without this, a
         // click on the popup's edge could reach the effect slot underneath.
+        //
+        // The shade has to sit in `Middle`, below the popup's `Foreground`.
+        // A `Foreground` shade is registered on the first frame after the
+        // popup, which puts it on top of the popup and swallows every list
+        // click, so the voice and speaker could never be changed.
         if ui.memory(|memory| memory.is_popup_open(popup)) {
             let screen = ui.ctx().screen_rect();
             let backdrop = egui::Area::new(Id::new("amp-picker-backdrop"))
-                .order(egui::Order::Foreground)
+                .order(egui::Order::Middle)
                 .fixed_pos(screen.min)
                 .show(ui.ctx(), |ui| {
                     let response = ui.allocate_rect(screen, Sense::click_and_drag());
@@ -269,9 +277,6 @@ impl App {
             }
         }
         if let Some((anchor, placement)) = anchor {
-            if picker_open {
-                ui.memory_mut(|memory| memory.toggle_popup(popup));
-            }
             let mut keep_open = false;
             egui::popup_above_or_below_widget(ui, popup, anchor, *placement, |ui| {
                 ui.set_min_width(430.0);
@@ -286,7 +291,7 @@ impl App {
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button("Done").clicked() {
-                            ui.close_menu();
+                            ui.memory_mut(|memory| memory.close_popup());
                         }
                     });
                 });
