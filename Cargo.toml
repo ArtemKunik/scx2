@@ -7,8 +7,9 @@ license = "MIT"
 
 [features]
 default = ["ui"]
-ui = ["dep:eframe", "dep:rfd", "tuner"]
+ui = ["dep:eframe", "dep:rfd", "tuner", "midi"]
 tuner = ["dep:cpal", "dep:windows", "dep:hound"]
+midi = ["dep:midir"]
 
 [dependencies]
 anyhow = "1"
@@ -16,6 +17,7 @@ clap = { version = "4", features = ["derive"] }
 cpal = { version = "0.15.3", optional = true }
 eframe = { version = "0.27", optional = true }
 hound = { version = "3.5", optional = true }
+midir = { version = "0.10", optional = true }
 rfd = { version = "0.17", optional = true }
 roxmltree = "0.20"
 serde = { version = "1", features = ["derive"] }

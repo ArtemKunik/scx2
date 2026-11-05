@@ -43,6 +43,7 @@ mistake them for SCX2 features.
 | M5 | High-risk device work | Factory restore, firmware update, recovery path |
 | M6 | Amp-native tuner | Tuner/mute frames, fallback behaviour |
 | M7 | Optional/other products | Media library, expression pedal, FX loop, SD card, phrase sampler, community |
+| M8 | Host integration | MIDI foot controller, headless bridge |
 
 Effort is S (hours), M (a day or two), L (multi-day, needs hardware sessions).
 
@@ -99,6 +100,11 @@ Effort is S (hours), M (a day or two), L (multi-day, needs hardware sessions).
 **Current:** `scx2 store --bank 1|2 --index N --name ...` works and is verified;
 the editor has no equivalent.
 
+**State:** the editor action shipped (2026-11-05): **Save to Amp…** in the
+toolbar, a slot grid with the stored names, the overwrite warning and the
+`.fuse` backup offer, and a read-back check that compares the payload and the
+name. The hardware click-through is on the [test plan](test-plan.md).
+
 **Protocol** (verified 2026-11-04):
 
 ```text
@@ -138,6 +144,11 @@ host -> 1c 01 03 <bank> <index> 00 01 01 <name at 16..48>
 
 **Current:** `scx2 rename` writes the `0x04` name block; the editor has no
 action.
+
+**State:** shipped (2026-11-05). Right-click a stored preset in the sidebar and
+choose **Rename…**. The dialog shows the byte count, refuses empty and
+over-long names, and the worker sends the name block plus the execute frame,
+then compares the slot's payload with the copy from before the rename.
 
 **Protocol:** `0x04` name block, 32-byte ASCII at offset 16.
 
@@ -384,6 +395,35 @@ close, no stuck mute after disconnect.
 survive reload; no device bytes change.
 
 **Effort:** M.
+
+### M8.1 MIDI foot controller
+
+**Goal:** effect on/off from a MIDI footswitch, without adding hardware to the
+amp. The SCX2 has no MIDI input, so `scx2` is the bridge: it listens to a MIDI
+input and sends the verified `19 c3 <family> <state> <slot>` bypass frame.
+
+**Current:** the editor has a **MIDI** dialog (input, channel, learn, Toggle or
+Follow per effect) and `scx2 midi` runs the same mapping headlessly. Settings
+live in `midi.json` under the platform config directory.
+
+**Protocol:** no new device work. The bypass frame is already verified for the
+reverb family; the stomp, mod and delay families use the same shape and still
+need a hardware check.
+
+**Limits to document, not hide:**
+
+* a computer (or a small always-on host) must run `scx2`;
+* the change is a live-buffer edit, so a front-panel preset recall restores the
+  stored effect states;
+* host-side preset recall remains impossible, so MIDI cannot switch presets.
+
+**Acceptance:** a CC, a note and a program change each toggle the expected
+effect; Toggle and Follow behave as described; learning a second control for
+the same effect replaces the first; the mapping survives a restart; the
+headless bridge starts from the amp's reported state and ignores a control when
+that effect has no model loaded.
+
+**Effort:** S–M (done; hardware check pending).
 
 ## 5. Other-product FUSE features
 

@@ -13,13 +13,17 @@ mod fxmodels;
 mod fxpanel;
 mod hardware;
 mod knobs;
+mod midi;
+mod name;
 mod paint;
 mod parameters;
 mod parts;
 mod pedal;
 mod recorder;
+mod rename;
 mod rig;
 mod sidebar;
+mod store;
 mod sync;
 mod texture;
 mod theme;
@@ -57,6 +61,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
         self.elapsed_flash(dt);
+        self.poll_midi();
         self.pump(ctx);
         self.tuner.poll();
         self.recorder.poll();

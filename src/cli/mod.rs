@@ -3,6 +3,8 @@
 mod args;
 mod device;
 mod edit;
+#[cfg(feature = "midi")]
+mod midi;
 mod offline;
 mod param;
 
@@ -136,6 +138,20 @@ pub fn run() -> Result<()> {
             path,
             yes,
         } => probe(from, to, value, selector, path.as_deref(), yes),
+        #[cfg(feature = "midi")]
+        Command::Midi {
+            port,
+            config,
+            list,
+            path,
+            yes,
+        } => midi::run(
+            port.as_deref(),
+            config.as_deref(),
+            list,
+            path.as_deref(),
+            yes,
+        ),
         #[cfg(feature = "ui")]
         Command::Ui { from, path } => {
             if let Err(error) = scx2::ui::run(from, path) {

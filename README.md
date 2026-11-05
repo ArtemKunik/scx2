@@ -9,10 +9,11 @@ protocol over USB. This project talks to it directly.
 > **Status: read and write verified on hardware** (Super Champ X2, firmware
 > `May 30 2013`). Dumping, polling, live parameter writes, effect editing,
 > `.fuse` import/export, **store** and **rename** work, and a saved slot
-> survives a power cycle. Recall is read-only: the SCX2 has no host preset-load
-> command, so the front-panel knob is the only way to load a slot. Writes stay
-> dry-run unless you pass `--yes`. The decoder
-> is also covered by tests against a real FUSE capture.
+> survives a power cycle. Both also work from the editor, which reads the slot
+> back after each write. Recall is
+> read-only: the SCX2 has no host preset-load command, so the front-panel knob
+> is the only way to load a slot. Writes stay dry-run unless you pass `--yes`.
+> The decoder is also covered by tests against a real FUSE capture.
 > See [docs/test-plan.md](docs/test-plan.md).
 
 ## Commands
@@ -40,6 +41,8 @@ scx2 store --bank 1 --index 7 --name "My preset"   # verified on hardware
 scx2 rename "My preset" --bank 1 --index 7         # verified on hardware
 scx2 bypass reverb 5 --off                         # verified on hardware
 scx2 recall 7 --bank 1                             # read-only: prints the slot
+scx2 midi --list                                   # list MIDI inputs
+scx2 midi --yes                                    # headless foot-controller bridge
 ```
 
 `dump` and `replay` both print the full preset memory:
@@ -98,11 +101,19 @@ updates the picture and the live buffer immediately, and the picker stays open
 so both can be changed in one visit. Dragging the Voice knob still sweeps
 through the voices.
 
-The toolbar has **Open…**, **Save As…**, **Save Backup**, **Undo**, **Redo**
-and **Revert**, with Ctrl+O / Ctrl+S / Ctrl+Z / Ctrl+Shift+Z shortcuts. A `●`
-in the title means the current dump has unsaved changes. `Open` and the drag
-target accept both JSON backups and Fender FUSE `.fuse` files; `Save As` writes
-JSON for the whole dump, or `.fuse` for the selected preset.
+The toolbar has **Save to Amp…**, **Open…**, **Save As…**, **Save Backup**,
+**Undo**, **Redo** and **Revert**, with Ctrl+O / Ctrl+S / Ctrl+Z /
+Ctrl+Shift+Z shortcuts. A `●` in the title means the current dump has unsaved
+changes. **Save to Amp…** writes the live buffer into a bank/slot with FUSE's
+verified save frame: it shows the name the amp will store, warns when it is
+about to replace a named slot, offers to export that slot as a `.fuse` first,
+and reads the slot back afterwards, comparing every payload byte and the name.
+Right-click a stored preset in the sidebar to **Rename…** it: only the `0x04`
+name block and an execute frame are written, and the read-back checks that no
+other byte moved.
+`Open` and the drag target accept both JSON backups and Fender FUSE `.fuse`
+files; `Save As` writes JSON for the whole dump, or `.fuse` for the selected
+preset.
 
 **Tuner** opens a polyphonic guitar tuner fed by the amp's USB audio output.
 Click the button in the toolbar and strum: all six strings of standard tuning are
@@ -122,6 +133,22 @@ Pick the input and channel, then **Record** / **Stop**. The meter latches the
 take's peak and flags clipping; **Open folder** shows the takes. The full
 capture spec is in [docs/recording.md](docs/recording.md).
 
+**MIDI** opens the foot-controller bridge. The amp has no MIDI input, so the
+controller talks to `scx2`, which sends the same verified bypass frame as the
+ON/OFF pill. Pick the MIDI input, press **Learn** on Stomp, Mod, Delay or
+Reverb, and move the control you want to use; CC, note and program-change
+messages are all accepted. **Toggle** flips the effect on each press;
+**Follow** switches it on while the control is on, which also suits a latching
+footswitch that sends 127/0. The mappings are saved in `midi.json` under the
+platform config directory. `scx2 midi --yes` runs the same bridge without the
+editor, which is the useful mode for a laptop or small box left connected to
+the amp; `scx2 midi --list` prints the available inputs.
+
+MIDI on/off edits the live buffer. Recalling a preset on the amp's front panel
+restores that preset's stored effect states, and preset recall itself still has
+no host command. A computer must be running `scx2` between the controller and
+the amp.
+
 For **Neural Amp Modeler / IR re-amping**, record the dry guitar: select the
 hi-Z instrument input of an audio interface and the channel the guitar is on.
 The SCX2 cannot provide that signal — its USB is capture-only (it has no
@@ -140,9 +167,9 @@ can be removed.
 
 The knobs stay in sync with the amp. Turning a knob on the amp moves it on
 screen, and dragging one on the Live Buffer changes the sound straight away, so
-there is no write button. Stored presets are read-only while connected, because
-the command that saves to a slot is still unknown. Without an amp you can edit
-a backup and save it.
+there is no write button. Stored presets are read-only in place: edit the live
+buffer, then use **Save to Amp…** to write the slot it should live in. Without
+an amp you can edit a backup and save it.
 
 ## Build
 
@@ -261,6 +288,8 @@ the SCX2 has no host preset-load command.
 * Effect parameter names, per-model defaults and the `.fuse` XML shape:
   [jtangelder/refuse](https://github.com/jtangelder/refuse), used as reference
   data for FUSE's own model definitions.
+* [midir](https://github.com/Boddlnagg/midir) (MIT) provides the MIDI input for
+  the foot-controller bridge.
 * [OpenFUSE](https://github.com/dbarbashov/openfuse) (MIT) pointed to the meaning
   of the `0x05` and `0x1d` reports and the write acknowledgement; they were then
   checked on real hardware where noted in `docs/protocol.md`.

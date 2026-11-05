@@ -1,5 +1,7 @@
 pub mod capture;
 pub mod fuse;
+#[cfg(feature = "midi")]
+pub mod midi;
 pub mod models;
 pub mod params;
 pub mod protocol;

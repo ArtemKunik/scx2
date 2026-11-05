@@ -106,6 +106,9 @@ impl App {
                 if tool_button(ui, "Save As…", true, ButtonKind::Primary).clicked() {
                     self.save_dialog();
                 }
+                if tool_button(ui, "Save to Amp…", true, ButtonKind::Plain).clicked() {
+                    self.open_store_dialog();
+                }
                 if tool_button(ui, "Open…", true, ButtonKind::Plain).clicked() {
                     self.open_dialog();
                 }
@@ -165,6 +168,12 @@ impl App {
                     if !self.show_recorder {
                         self.recorder.stop();
                     }
+                }
+                if tool_button(ui, "MIDI", true, ButtonKind::Plain)
+                    .on_hover_text("MIDI foot controller for effect on/off")
+                    .clicked()
+                {
+                    self.open_midi_window();
                 }
             });
         });

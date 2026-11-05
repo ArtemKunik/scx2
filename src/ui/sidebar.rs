@@ -65,6 +65,7 @@ impl App {
                 ];
                 let selected = self.selected;
                 let mut clicked = None;
+                let mut rename = None;
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -85,8 +86,17 @@ impl App {
                             });
                             ui.add_space(4.0);
                             for row in rows {
-                                if preset_row(ui, row, selected == row.key).clicked() {
+                                let response = preset_row(ui, row, selected == row.key);
+                                if response.clicked() {
                                     clicked = Some(row.key);
+                                }
+                                if row.key.0 != BANK_LIVE {
+                                    response.context_menu(|ui| {
+                                        if ui.button("Rename…").clicked() {
+                                            rename = Some(row.key);
+                                            ui.close_menu();
+                                        }
+                                    });
                                 }
                             }
                         }
@@ -94,6 +104,9 @@ impl App {
                     });
                 if let Some(key) = clicked {
                     self.selected = key;
+                }
+                if let Some((bank, index)) = rename {
+                    self.open_rename_dialog(bank, index);
                 }
             });
     }

@@ -167,6 +167,59 @@ reaches flash, not just RAM. The slot was then restored to `NONE`.
 hardware check is to import a FUSE preset, send it to the live buffer with the
 editor, and confirm the amp reports the same models and parameter bytes.
 
+### Save from the editor (M1.1)
+
+The frame is the verified one; this checklist covers the dialog around it.
+
+1. With the Live Buffer selected, open **Save to Amp…**. The dialog defaults to
+   the first empty amp slot (the voice slot 0 is not offered), and the slot
+   grid shows every stored name.
+2. Pick a named slot: **Replaces** must name it and the backup box must be
+   ticked. Export the backup and confirm the `.fuse` file opens in the editor.
+3. Save. The status bar must read `read-back matches`, the sidebar must select
+   the written slot, and its name must be the one in the dialog.
+4. Change the volume, save to the same slot again, and confirm the read-back
+   matches and the slot shows the new value.
+5. Type a name longer than 32 bytes: **Trim to 32** must appear and the Save
+   button must stay disabled until the name fits.
+6. Disconnect the amp, open the dialog again, and confirm the status bar shows
+   the dry-run frame and nothing is written.
+7. Power-cycle and confirm the slot survived.
+
+### Rename from the editor (M1.2)
+
+1. Right-click a named preset in the sidebar and choose **Rename…**. The dialog
+   must show `Amp preset N · now "old name"`.
+2. Type a new name and press Rename. The status bar must read
+   `Renamed amp N to "…" · other bytes unchanged` and the sidebar must show the
+   new name.
+3. Open the slot's stored state and confirm the voice and every effect are
+   unchanged (the read-back already compares the payload).
+4. Clear the name field: Rename must stay disabled.
+5. Paste more than 32 bytes: **Trim to 32** must appear and Rename must stay
+   disabled until the name fits.
+6. Disconnect and repeat: both frames must appear in the status bar as a dry
+   run, and nothing is written.
+
+### MIDI foot controller (M8.1)
+
+1. Connect a class-compliant MIDI controller, open **MIDI**, and confirm it is
+   in the input list after **Refresh**.
+2. Learn a CC for Stomp, Mod, Delay and Reverb. Toggle each one: the pill on
+   the pedal and the note in the status bar must follow, and the sound must
+   change without unloading the model or moving its knobs.
+3. Repeat with a note-on/off control and with a program-change-only control.
+4. Set a channel filter and confirm another channel is ignored.
+5. Switch one effect to **Follow** and use a latching footswitch that sends
+   127/0: the effect must be on in one position and off in the other.
+6. Recall a stored preset on the amp's front panel. The app should report the
+   preset's effect states, and the next MIDI press must target the live buffer's
+   slot, not the previous preset's slot.
+7. Restart the editor: the mappings must still be there.
+8. Run `scx2 midi --list`, then `scx2 midi --yes` with the editor closed. Each
+   press must print the effect and state, and the amp must respond the same way.
+9. Without `--yes`, the bridge must print dry-run frames and change nothing.
+
 ## What to send back
 
 * the output of `scan` and `dump`

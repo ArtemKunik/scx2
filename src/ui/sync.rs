@@ -41,6 +41,7 @@ impl App {
             self.selected = (BANK_LIVE, 0);
         }
         self.synced = true;
+        self.synced_at = Some(Instant::now());
     }
 
     /// The live buffer alone, available long before the rest of a dump.

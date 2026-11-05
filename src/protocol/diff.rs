@@ -30,6 +30,14 @@ impl Change {
     }
 }
 
+/// The first byte that carries preset data instead of frame routing.
+///
+/// Bytes 0..8 are the marker, direction, kind, bank, index, padding and the
+/// kind-dependent flag. The amp flips byte 7 to `0x01` after an execute frame,
+/// and a stored copy moves bank/index, so a read-back check must compare the
+/// payload and not the header.
+pub const PAYLOAD_START: usize = 8;
+
 /// Byte-level differences between two versions of one preset.
 pub fn diff_presets(a: &Preset, b: &Preset) -> Vec<Change> {
     let mut changes = Vec::new();
@@ -75,4 +83,86 @@ pub fn diff_dumps(a: &Dump, b: &Dump) -> Vec<Change> {
         }
     }
     changes
+}
+
+/// Payload differences between two versions of one preset, header ignored.
+///
+/// This is the read-back check for a store: the amp copies its live buffer
+/// into a slot, so everything from the model id down should match once the
+/// bank/index and the execute flag are left out.
+pub fn diff_payload(a: &Preset, b: &Preset) -> Vec<Change> {
+    diff_presets(a, b)
+        .into_iter()
+        .filter(|change| change.offset >= PAYLOAD_START)
+        .collect()
+}
+
+/// Blocks that carry a loaded model in `full` but are absent from `partial`.
+///
+/// A cleared effect can be reported by the live buffer and left out of a
+/// stored preset; that is not data loss. A loaded model that vanishes is, so
+/// it is reported separately from the byte diff.
+pub fn models_missing_from(full: &Preset, partial: &Preset) -> Vec<(Kind, u16)> {
+    full.blocks
+        .iter()
+        .filter_map(|(code, message)| {
+            let model = message.model().filter(|model| *model != 0)?;
+            (!partial.blocks.contains_key(code)).then(|| (Kind::from_code(*code), model))
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A preset built from raw reports, so the tests see the same bytes the
+    /// amp sends.
+    fn preset(bank: u8, index: u8, volume: u8) -> Preset {
+        let mut amp = [0u8; REPORT_SIZE];
+        amp[0] = FRAME_MARKER;
+        amp[1] = AMP_TO_HOST;
+        amp[2] = Kind::Amp.code();
+        amp[3] = bank;
+        amp[4] = index;
+        amp[6] = 0x01;
+        amp[OFF_MODEL] = 0x21;
+        amp[OFF_MODEL + 1] = 0x00;
+        amp[32] = volume;
+        let mut preset = Preset::new(bank, index);
+        preset.add(Message::from_bytes(amp).expect("a valid amp report"));
+        preset
+    }
+
+    #[test]
+    fn a_payload_diff_ignores_the_frame_header() {
+        let live = preset(BANK_LIVE, 0, 0x63);
+        let stored = preset(BANK_AMP, 7, 0x63);
+        assert!(
+            !diff_presets(&live, &stored).is_empty(),
+            "the header does move between a live buffer and a stored slot"
+        );
+        assert!(
+            diff_payload(&live, &stored).is_empty(),
+            "the same payload in another slot is a match"
+        );
+    }
+
+    #[test]
+    fn a_payload_diff_finds_a_changed_parameter() {
+        let live = preset(BANK_LIVE, 0, 0x63);
+        let stored = preset(BANK_AMP, 7, 0x40);
+        let changes = diff_payload(&live, &stored);
+        assert_eq!(changes.len(), 1);
+        assert_eq!((changes[0].kind, changes[0].offset), (Kind::Amp, 32));
+    }
+
+    #[test]
+    fn a_loaded_model_missing_from_the_stored_copy_is_reported() {
+        let live = preset(BANK_LIVE, 0, 0x63);
+        let stored = Preset::new(BANK_AMP, 7);
+        let missing = models_missing_from(&live, &stored);
+        assert_eq!(missing, vec![(Kind::Amp, 0x21)]);
+        assert_eq!(models_missing_from(&stored, &live), vec![]);
+    }
 }

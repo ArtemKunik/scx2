@@ -276,6 +276,25 @@ pub(crate) enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// Bridge a MIDI foot controller to effect on/off, without the editor
+    #[cfg(feature = "midi")]
+    Midi {
+        /// MIDI input port name (defaults to the saved setting)
+        #[arg(long)]
+        port: Option<String>,
+        /// MIDI settings file (defaults to the editor's midi.json)
+        #[arg(long)]
+        config: Option<PathBuf>,
+        /// List MIDI input ports and exit
+        #[arg(long)]
+        list: bool,
+        /// HID path to open (see `scx2 scan`)
+        #[arg(long)]
+        path: Option<String>,
+        /// Actually transmit
+        #[arg(long)]
+        yes: bool,
+    },
     /// Open the desktop editor
     #[cfg(feature = "ui")]
     Ui {

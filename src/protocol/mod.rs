@@ -55,6 +55,16 @@ pub const BANK_LIVE: u8 = 0;
 pub const BANK_AMP: u8 = 1;
 pub const BANK_FX: u8 = 2;
 
+/// Short name for a bank byte: `live`, `amp` or `fx`.
+pub fn bank_label(bank: u8) -> &'static str {
+    match bank {
+        BANK_LIVE => "live",
+        BANK_AMP => "amp",
+        BANK_FX => "fx",
+        _ => "?",
+    }
+}
+
 /// The amp's end-of-dump acknowledgement.
 pub const END_OF_DUMP: [u8; 2] = [0xFF, 0x01];
 mod diff;
@@ -65,7 +75,7 @@ mod message;
 mod notice;
 mod preset;
 
-pub use diff::{diff_dumps, diff_presets, Change};
+pub use diff::{diff_dumps, diff_payload, diff_presets, models_missing_from, Change};
 pub use dump::Dump;
 pub use frames::{
     as_host_frame, boot_banner, bypass, execute_model_change, handshake_step1, handshake_step2,

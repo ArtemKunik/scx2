@@ -41,8 +41,8 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | New preset | missing | No "start from empty" action in the editor. |
 | Open a preset file | yes | JSON backup or `.fuse`. |
 | Save a preset file | yes | Save As writes JSON or `.fuse`. |
-| Save the live buffer to an amp slot | partial | `scx2 store` works and is verified; the editor has no Save-to-amp action. |
-| Rename a stored preset | partial | `scx2 rename` works; the editor has no rename action. |
+| Save the live buffer to an amp slot | yes | `scx2 store` is the reference and is verified; the editor's **Save to Amp…** sends the same frame, warns before replacing a named slot, offers a `.fuse` backup and checks the read-back. |
+| Rename a stored preset | yes | `scx2 rename` is the reference; right-click a stored preset in the editor and choose **Rename…**. Only the name block is written, and the other bytes are compared afterwards. |
 | Save effects / voice sub-presets | partial | Storing to bank 2 / bank 1 works from the CLI. FUSE's SAVE EFFECTS, SAVE CH2 VOICE and SAVE CH1 dialogs are not in the editor. |
 | Delete / overwrite a preset | partial | Storing overwrites a slot. FUSE itself says amp presets cannot be deleted, only overwritten. |
 | Preset browser | missing | FUSE filters PC vs. amp presets, browses previous/next, searches and sorts. `scx2` lists the current dump only. |
@@ -57,7 +57,7 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | FUSE feature | Status | Notes |
 | --- | --- | --- |
 | Scan / connect / dump | yes | Handshake, three banks, live polling. |
-| Store and rename | partial | Protocol verified; CLI only as above. |
+| Store and rename | yes | Both have editor actions: **Save to Amp…** and the sidebar's **Rename…**. |
 | Effect bypass | yes | Verified fast frame. |
 | Firmware update | missing | `docs/firmware.md` documents the update file and boot mode, but `scx2` cannot enter boot mode or flash. |
 | Factory restore | missing | Not implemented. |
