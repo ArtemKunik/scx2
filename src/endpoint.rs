@@ -5,11 +5,22 @@
 //! still installed. `IMMDeviceEnumerator` with the full state mask sees it
 //! anyway, and the undocumented `IPolicyConfig` interface flips the same switch
 //! as the panel's Enable item.
+//!
+//! Linux has no equivalent switch: ALSA exposes the amp as soon as the USB
+//! device is plugged in, and PulseAudio/PipeWire publish it to cpal. The tuner
+//! only needs to rescan its input list there.
 
 use std::sync::mpsc::{self, Receiver};
 use std::time::Duration;
 
 use anyhow::{anyhow, Result};
+
+/// Whether this platform has a capture endpoint the app can switch on.
+///
+/// Only Windows needs the "Enable amp input" action; see the module docs.
+pub fn can_enable() -> bool {
+    cfg!(windows)
+}
 
 /// A capture endpoint as Windows sees it, including hidden ones.
 #[derive(Clone, Debug, PartialEq, Eq)]

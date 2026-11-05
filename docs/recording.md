@@ -21,12 +21,20 @@ Measured on the reference machine with cpal/WASAPI:
 | Default sample format | `F32` |
 | Supported sample formats | `U8`, `I16`, `I32`, `F32` |
 | Signal | post-voice, post-effects, post-cabinet |
-| Driver path | WASAPI shared mode |
+| Driver path | WASAPI shared mode (Windows), ALSA/PipeWire (Linux) |
 
 A capture device that appears in Windows is not necessarily an enabled one.
 If the amp's endpoint is disabled, **Enable amp input** in the tuner switches it
 on through `IPolicyConfig::SetEndpointVisibility`; the recorder's **Rescan**
-re-lists inputs afterwards.
+re-lists inputs afterwards. Linux has no such switch: ALSA exposes the amp's USB
+capture device as soon as it is plugged in, so **Rescan** is all that is needed
+there, and the **Enable amp input** button is hidden.
+
+Both platforms share the same cpal code path, with one caveat worth knowing: an
+audio backend can block while it opens a stream (PipeWire's ALSA plugin waits
+for a node when no matching source exists). The tuner and recorder stop waiting
+for their audio thread after 750 ms and leave it detached, so a stuck backend
+never freezes the editor or keeps the process alive after the window closes.
 
 ## Recorder output
 
@@ -77,7 +85,8 @@ opened.
 ## Files and naming
 
 ```
-%USERPROFILE%\Music\SCX2 Recordings\
+%USERPROFILE%\Music\SCX2 Recordings\      (Windows)
+$HOME/Music/SCX2 Recordings/              (Linux, macOS)
   scx2-20261105-121505.wav
   scx2-20261105-121505.json
 ```

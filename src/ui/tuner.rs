@@ -113,6 +113,7 @@ impl App {
                     });
                 if status == Status::Running
                     && !using_amp
+                    && crate::endpoint::can_enable()
                     && ui
                         .small_button("Enable amp input")
                         .on_hover_text("Switch the amp's USB input on in Windows")
@@ -145,11 +146,12 @@ impl App {
                     TEXT_3,
                 ))
             } else {
-                Some((
+                let hint = if crate::endpoint::can_enable() {
                     "Using the default input — enable the amp's USB input above to tune through the amp."
-                        .to_string(),
-                    TEXT_3,
-                ))
+                } else {
+                    "Using the default input — plug in the amp and press Rescan to tune through it."
+                };
+                Some((hint.to_string(), TEXT_3))
             }
         } else {
             None

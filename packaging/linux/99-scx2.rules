@@ -1,0 +1,13 @@
+# Fender Super Champ X2 (VID 1ed8, PID 000e) — let the logged-in user talk to
+# the amp's raw HID interface.
+#
+# Linux creates /dev/hidrawN as root-only, so `scx2` would need sudo without
+# this rule. `uaccess` grants the seat's active user an ACL on the node, which
+# is the same mechanism used for game controllers and Yubikeys.
+#
+# Install:
+#   sudo cp packaging/linux/99-scx2.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+# then unplug and replug the amp.
+
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1ed8", ATTRS{idProduct}=="000e", TAG+="uaccess"
