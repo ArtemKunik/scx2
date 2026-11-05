@@ -27,6 +27,8 @@ const EVENT_CAPACITY: usize = 64;
 const QUEUE_SAMPLES: usize = 48_000 * 4;
 const PROGRESS: Duration = Duration::from_millis(100);
 const BITS_PER_SAMPLE: u16 = 24;
+/// At or above this magnitude the sample will be hard-clipped by `to_i24`.
+const CLIP_LEVEL: f32 = 0.999;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
@@ -51,12 +53,15 @@ enum Event {
     Progress {
         seconds: f32,
         level: f32,
+        clipped: bool,
     },
     Finished {
         path: PathBuf,
         sidecar: PathBuf,
         seconds: f32,
         frames: u64,
+        peak: f32,
+        clipped: bool,
     },
     Error(String),
 }
@@ -81,6 +86,10 @@ pub struct Recorder {
     pub seconds: f32,
     /// Peak of the last progress window, linear 0..1.
     pub level: f32,
+    /// Highest peak of the take so far, linear 0..1.
+    pub peak: f32,
+    /// Latched: the take reached full scale at least once.
+    pub clipped: bool,
     pub frames: u64,
 }
 
@@ -100,6 +109,8 @@ impl Default for Recorder {
             error: None,
             seconds: 0.0,
             level: 0.0,
+            peak: 0.0,
+            clipped: false,
             frames: 0,
         }
     }
@@ -141,6 +152,8 @@ impl Recorder {
                 self.error = None;
                 self.seconds = 0.0;
                 self.level = 0.0;
+                self.peak = 0.0;
+                self.clipped = false;
                 self.frames = 0;
             }
             Err(error) => {
@@ -203,21 +216,31 @@ impl Recorder {
                     self.path = Some(path);
                     self.error = None;
                 }
-                Event::Progress { seconds, level } => {
+                Event::Progress {
+                    seconds,
+                    level,
+                    clipped,
+                } => {
                     self.seconds = seconds;
                     self.level = level;
+                    self.peak = self.peak.max(level);
+                    self.clipped |= clipped;
                 }
                 Event::Finished {
                     path,
                     sidecar,
                     seconds,
                     frames,
+                    peak,
+                    clipped,
                 } => {
                     self.status = Status::Idle;
                     self.path = Some(path);
                     self.sidecar = Some(sidecar);
                     self.seconds = seconds;
                     self.frames = frames;
+                    self.peak = self.peak.max(peak);
+                    self.clipped |= clipped;
                     self.level = 0.0;
                     self.stop = None;
                 }
@@ -295,6 +318,48 @@ fn input_devices() -> Result<Vec<(Input, cpal::Device)>> {
     Ok(inputs)
 }
 
+/// Pick a stream config that actually carries `channel`.
+///
+/// The device default is often a 2-channel mix, even on an interface that
+/// advertises eight inputs. Opening that default would silently clamp a
+/// higher channel, so ask for a range wide enough for the requested one.
+fn capture_config(
+    device: &cpal::Device,
+    name: &str,
+    channel: usize,
+) -> Result<cpal::SupportedStreamConfig> {
+    let default = device
+        .default_input_config()
+        .with_context(|| format!("opening audio input {name:?}"))?;
+    if default.channels() as usize > channel {
+        return Ok(default);
+    }
+
+    let needed = (channel + 1) as u16;
+    let mut fallback = None;
+    let ranges = device
+        .supported_input_configs()
+        .with_context(|| format!("listing input formats for {name:?}"))?;
+    for range in ranges {
+        if range.channels() < needed {
+            continue;
+        }
+        // Stay at the device's default rate when the wider config allows it.
+        let rate = default.sample_rate();
+        let config = if rate >= range.min_sample_rate() && rate <= range.max_sample_rate() {
+            range.with_sample_rate(rate)
+        } else {
+            range.with_max_sample_rate()
+        };
+        if config.sample_format() == default.sample_format() {
+            return Ok(config);
+        }
+        fallback.get_or_insert(config);
+    }
+
+    fallback.ok_or_else(|| anyhow::anyhow!("{name:?} cannot open input channel {}", channel + 1))
+}
+
 fn run(
     wanted: Option<String>,
     channel: usize,
@@ -317,9 +382,7 @@ fn run(
         .ok_or_else(|| anyhow::anyhow!("no usable audio input device"))?;
     let name = input.name;
 
-    let supported = device
-        .default_input_config()
-        .with_context(|| format!("opening audio input {name:?}"))?;
+    let supported = capture_config(&device, &name, channel)?;
     let sample_format = supported.sample_format();
     let config: cpal::StreamConfig = supported.into();
     let sample_rate = config.sample_rate.0;
@@ -350,6 +413,8 @@ fn run(
         false,
         0,
         0.0,
+        0.0,
+        false,
     )?;
     let _ = events.try_send(Event::Started { path: path.clone() });
 
@@ -384,7 +449,10 @@ fn run(
     stream.play().context("starting the audio input")?;
 
     let mut frames: u64 = 0;
+    let mut window_peak: f32 = 0.0;
+    let mut window_clipped = false;
     let mut peak: f32 = 0.0;
+    let mut clipped = false;
     let mut scratch: Vec<f32> = Vec::with_capacity(4096);
     let mut last_report = Instant::now();
     loop {
@@ -397,16 +465,24 @@ fn run(
                 .write_sample(to_i24(*sample))
                 .context("writing the take")?;
             frames += 1;
-            peak = peak.max(sample.abs());
+            let magnitude = sample.abs();
+            window_peak = window_peak.max(magnitude);
+            peak = peak.max(magnitude);
+            if magnitude >= CLIP_LEVEL {
+                window_clipped = true;
+                clipped = true;
+            }
         }
         if last_report.elapsed() >= PROGRESS {
             let seconds = frames as f32 / sample_rate as f32;
             let _ = events.try_send(Event::Progress {
                 seconds,
-                level: peak,
+                level: window_peak,
+                clipped: window_clipped,
             });
             last_report = Instant::now();
-            peak = 0.0;
+            window_peak = 0.0;
+            window_clipped = false;
         }
         let stopping = match stop.try_recv() {
             Ok(()) | Err(TryRecvError::Disconnected) => true,
@@ -431,6 +507,9 @@ fn run(
             .write_sample(to_i24(*sample))
             .context("writing the take")?;
         frames += 1;
+        let magnitude = sample.abs();
+        peak = peak.max(magnitude);
+        clipped |= magnitude >= CLIP_LEVEL;
     }
     writer.finalize().context("finishing the take")?;
 
@@ -446,12 +525,16 @@ fn run(
         true,
         frames,
         seconds,
+        peak,
+        clipped,
     )?;
     let _ = events.try_send(Event::Finished {
         path,
         sidecar,
         seconds,
         frames,
+        peak,
+        clipped,
     });
     Ok(())
 }
@@ -532,6 +615,15 @@ fn to_i24(sample: f32) -> i32 {
     (sample.clamp(-1.0, 1.0) * 8_388_607.0).round() as i32
 }
 
+/// Linear peak to dBFS, with silence pinned at -120.
+pub fn dbfs(peak: f32) -> f32 {
+    if peak > 1e-6 {
+        20.0 * peak.log10()
+    } else {
+        -120.0
+    }
+}
+
 fn write_sidecar(
     sidecar: &Path,
     path: &Path,
@@ -543,6 +635,8 @@ fn write_sidecar(
     complete: bool,
     frames: u64,
     seconds: f32,
+    peak: f32,
+    clipped: bool,
 ) -> Result<()> {
     let info = json!({
         "recorded_with": format!("scx2 {}", env!("CARGO_PKG_VERSION")),
@@ -556,7 +650,9 @@ fn write_sidecar(
         "bits_per_sample": BITS_PER_SAMPLE,
         "complete": complete,
         "frames": frames,
-        "seconds": (seconds * 1000.0).round() / 1000.0,
+        "seconds": ((seconds * 1000.0).round() as f64) / 1000.0,
+        "peak_dbfs": ((dbfs(peak) * 10.0).round() as f64) / 10.0,
+        "clipped": clipped,
         "note": "Recorded from one input channel. The amp's USB output is post-effects and post-cabinet; for NAM/IR re-amping record the dry guitar from an interface input.",
         "session": meta,
     });
@@ -622,6 +718,13 @@ mod tests {
     fn formats_known_dates() {
         assert_eq!(civil_from_unix(0), (1970, 1, 1, 0, 0, 0));
         assert_eq!(civil_from_unix(1_793_836_800), (2026, 11, 5, 0, 0, 0));
+    }
+
+    #[test]
+    fn peak_converts_to_dbfs() {
+        assert!(dbfs(1.0).abs() < 1e-6);
+        assert!((dbfs(0.5) + 6.0206).abs() < 0.01);
+        assert_eq!(dbfs(0.0), -120.0);
     }
 
     #[test]

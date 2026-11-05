@@ -147,7 +147,21 @@ impl App {
                 .selected
                 .as_deref()
                 .unwrap_or("the amp / default input");
-            Some((format!("Recording from {device}."), TEXT_2))
+            if self.recorder.clipped {
+                Some((format!("Recording from {device} — input clipped."), ERROR))
+            } else {
+                Some((format!("Recording from {device}."), TEXT_2))
+            }
+        } else if self.recorder.clipped {
+            let saved = self
+                .recorder
+                .path
+                .as_ref()
+                .and_then(|path| path.file_name())
+                .and_then(|name| name.to_str())
+                .map(|name| format!("Saved {name}"))
+                .unwrap_or_else(|| "The take".to_string());
+            Some((format!("{saved} — clipped; lower the input gain."), ERROR))
         } else if let Some(path) = &self.recorder.path {
             let name = path
                 .file_name()
@@ -225,6 +239,8 @@ impl App {
 
     fn recorder_meter(&self, ui: &mut Ui) {
         let level = self.recorder.level.clamp(0.0, 1.0);
+        let peak = self.recorder.peak.max(level).clamp(0.0, 1.0);
+        let clipped = self.recorder.clipped;
         let (rect, _) =
             ui.allocate_exact_size(Vec2::new(ui.available_width(), 14.0), Sense::hover());
         let track = Rect::from_min_max(
@@ -238,17 +254,27 @@ impl App {
             fill.set_right(track.left() + filled);
             ui.painter().rect_filled(fill, 2.0, AMBER);
         }
-        let db = if level > 1e-6 {
-            20.0 * level.log10()
+        // Latched peak marker, so a brief transient stays visible.
+        let peak_x = track.left() + track.width() * peak.sqrt();
+        ui.painter().rect_filled(
+            Rect::from_min_max(
+                Pos2::new(peak_x - 1.0, track.top()),
+                Pos2::new(peak_x + 1.0, track.bottom()),
+            ),
+            1.0,
+            if clipped { REC } else { TEXT_2 },
+        );
+        let (text, color) = if clipped {
+            (format!("CLIP  {:.0} dBFS", recorder::dbfs(peak)), REC)
         } else {
-            -120.0
+            (format!("{:.0} dBFS", recorder::dbfs(peak)), TEXT_3)
         };
         ui.painter().text(
             Pos2::new(rect.right(), track.center().y),
             Align2::RIGHT_CENTER,
-            format!("{db:.0} dBFS"),
+            text,
             regular(10.0),
-            TEXT_3,
+            color,
         );
         ui.painter().text(
             Pos2::new(track.left(), track.center().y),

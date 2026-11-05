@@ -117,8 +117,9 @@ effects bypassed gives the most reliable reading.
 **Recorder** writes one input channel to a 24-bit WAV in
 `Music\SCX2 Recordings`, with a `.json` sidecar holding the live preset
 (voice, cabinet, every block and its raw bytes) so a take can be recalled.
-Pick the input and channel, then **Record** / **Stop**. The meter shows the
-peak of the last 100 ms, and **Open folder** shows the takes.
+Pick the input and channel, then **Record** / **Stop**. The meter latches the
+take's peak and flags clipping; **Open folder** shows the takes. The full
+capture spec is in [docs/recording.md](docs/recording.md).
 
 For **Neural Amp Modeler / IR re-amping**, record the dry guitar: select the
 hi-Z instrument input of an audio interface and the channel the guitar is on.
