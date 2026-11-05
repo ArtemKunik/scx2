@@ -124,8 +124,8 @@ pub(super) fn paint(
     values: &[u8],
 ) -> Vec<Control> {
     let (width, height): (f32, f32) = match fx.form {
-        Form::Box => (148.0, 166.0),
-        Form::Wah => (172.0, 166.0),
+        Form::Box => (164.0, 180.0),
+        Form::Wah => (184.0, 180.0),
         Form::Tape => (238.0, 112.0),
         Form::Tank => (246.0, 104.0),
         Form::Rack => (248.0, 88.0),

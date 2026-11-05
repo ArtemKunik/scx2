@@ -21,11 +21,18 @@ const GRILLE_MIN: f32 = 72.0;
 const GRILLE_MAX: f32 = 380.0;
 
 pub(super) fn show(app: &mut App, ctx: &egui::Context, art: &Art) {
+    // A focused pedal editor is modal: the panels still paint behind the
+    // shade, but nothing under it may react to a click.
+    let modal = app.fx_editor.is_some();
+
     egui::SidePanel::left("presets")
         .exact_width(SIDEBAR_W)
         .resizable(false)
         .frame(egui::Frame::none().fill(SIDEBAR))
-        .show(ctx, |ui| app.sidebar(ui));
+        .show(ctx, |ui| {
+            ui.set_enabled(!modal);
+            app.sidebar(ui);
+        });
 
     egui::TopBottomPanel::top("toolbar")
         .exact_height(44.0)
@@ -35,7 +42,10 @@ pub(super) fn show(app: &mut App, ctx: &egui::Context, art: &Art) {
                 .fill(WINDOW)
                 .inner_margin(Margin::symmetric(24.0, 12.0)),
         )
-        .show(ctx, |ui| app.toolbar(ui));
+        .show(ctx, |ui| {
+            ui.set_enabled(!modal);
+            app.toolbar(ui);
+        });
 
     egui::TopBottomPanel::bottom("status")
         .exact_height(30.0)
@@ -45,7 +55,10 @@ pub(super) fn show(app: &mut App, ctx: &egui::Context, art: &Art) {
                 .fill(WINDOW)
                 .inner_margin(Margin::symmetric(24.0, 0.0)),
         )
-        .show(ctx, |ui| app.status_bar(ui));
+        .show(ctx, |ui| {
+            ui.set_enabled(!modal);
+            app.status_bar(ui);
+        });
 
     egui::CentralPanel::default()
         .frame(egui::Frame::none().fill(WINDOW).inner_margin(Margin {
@@ -54,7 +67,14 @@ pub(super) fn show(app: &mut App, ctx: &egui::Context, art: &Art) {
             top: 0.0,
             bottom: 4.0,
         }))
-        .show(ctx, |ui| app.body(ui, art));
+        .show(ctx, |ui| {
+            ui.set_enabled(!modal);
+            app.body(ui, art);
+        });
+
+    // The focused pedal editor sits above every panel, so opening it never
+    // shifts the amp or the board underneath.
+    app.effect_editor(ctx, art);
 
     drop_overlay(ctx);
 }
@@ -126,6 +146,7 @@ impl App {
 
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
+            .drag_to_scroll(false)
             .show(ui, |ui| {
                 let pad = ((ui.available_width() - width) / 2.0).max(0.0);
                 ui.horizontal_top(|ui| {

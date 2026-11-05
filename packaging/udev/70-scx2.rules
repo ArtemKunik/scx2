@@ -1,0 +1,14 @@
+# Fender Super Champ X2 — raw HID access for the logged-in desktop user.
+#
+# Install as /etc/udev/rules.d/70-scx2.rules, then:
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#   # replug the amp
+#
+# `uaccess` relies on systemd-logind. On systems without it, replace the tag
+# with: MODE="0660", GROUP="plugdev"   (or the local desktop group)
+#
+# 1ed8:000e is the running amp; 1ed8:0006 is its firmware-update boot mode.
+
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1ed8", ATTRS{idProduct}=="000e", TAG+="uaccess"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1ed8", ATTRS{idProduct}=="0006", TAG+="uaccess"

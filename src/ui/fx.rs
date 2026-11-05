@@ -6,8 +6,6 @@
 
 use eframe::egui::{Color32, Pos2, Rect, Vec2};
 
-use crate::protocol;
-
 pub(super) use super::fxmodels::look;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -48,34 +46,33 @@ pub struct Control {
     pub radius: f32,
 }
 
-/// One effect parameter bound to a knob on the pedal.
-#[derive(Clone, Copy)]
-pub struct Param {
-    pub label: &'static str,
-    pub offset: usize,
-}
-
 impl Pedal {
-    /// The parameter bytes the knobs on this pedal edit, in drawing order.
-    pub fn params(&self) -> Vec<Param> {
-        (0..self.knobs)
-            .map(|index| Param {
-                label: self.labels.get(index).copied().unwrap_or("PARAM"),
-                offset: protocol::OFF_PARAMS + index,
-            })
-            .collect()
-    }
-
     /// Knob positions for this pedal inside `unit`, in drawing order.
     ///
     /// The paint code and the hit testing both use this, so a knob cannot drift
     /// away from the circle a person is actually grabbing.
     pub fn controls(&self, unit: Rect) -> Vec<Control> {
-        // FUSE gives every effect six parameter slots. Some models use all six,
-        // so the knob row has to shrink rather than overlap when it is full.
-        let radius = if self.knobs > 4 { 6.5 } else { 11.0 };
+        // FUSE gives every effect six parameter slots. Five- and six-knob
+        // models get two rows on the board so their knobs stay visible instead
+        // of collapsing into a line of dots.
+        let radius = if self.knobs > 4 { 8.5 } else { 11.0 };
         match self.form {
-            Form::Box => row(unit, unit.top() + unit.height() * 0.33, radius, self.knobs),
+            Form::Box => {
+                if self.knobs > 4 {
+                    let split = self.knobs.div_ceil(2);
+                    let mut controls =
+                        row_of(unit, unit.top() + unit.height() * 0.27, radius, split);
+                    controls.extend(row_of(
+                        unit,
+                        unit.top() + unit.height() * 0.42,
+                        radius,
+                        self.knobs - split,
+                    ));
+                    controls
+                } else {
+                    row(unit, unit.top() + unit.height() * 0.33, radius, self.knobs)
+                }
+            }
             Form::Wah => Vec::new(),
             Form::Tape => {
                 let radius = if self.knobs > 4 { 6.0 } else { 8.0 };
@@ -100,6 +97,10 @@ impl Pedal {
 }
 
 fn row(unit: Rect, y: f32, radius: f32, count: usize) -> Vec<Control> {
+    row_of(unit, y, radius, count)
+}
+
+fn row_of(unit: Rect, y: f32, radius: f32, count: usize) -> Vec<Control> {
     let span = unit.width() * 0.72;
     (0..count)
         .map(|index| {
@@ -143,16 +144,37 @@ mod tests {
                     look.labels.len() >= look.knobs,
                     "{name} has a knob without a label"
                 );
-                let params = look.params();
-                assert_eq!(params.len(), look.knobs);
-                for (index, param) in params.iter().enumerate() {
-                    assert_eq!(param.offset, protocol::OFF_PARAMS + index);
+                for (index, control) in controls.iter().enumerate() {
                     assert!(
-                        unit.contains(controls[index].center),
+                        unit.contains(control.center),
                         "{name} draws knob {index} outside its unit"
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn five_knob_pedals_use_two_readable_rows() {
+        let unit = Rect::from_min_size(Pos2::ZERO, Vec2::new(164.0, 180.0));
+        let look = look(Kind::Stomp, 0x003c).expect("Overdrive has a face");
+        assert_eq!(look.knobs, 5);
+        let controls = look.controls(unit);
+        assert_eq!(controls.len(), 5);
+        assert!(
+            controls[0].center.y < controls[3].center.y,
+            "the fifth knob should drop to a second row"
+        );
+        assert!(
+            (controls[0].center.y - controls[2].center.y).abs() < 1.0,
+            "the first three knobs should share the top row"
+        );
+        assert!(
+            (controls[3].center.y - controls[4].center.y).abs() < 1.0,
+            "the last two knobs should share the second row"
+        );
+        for control in &controls {
+            assert!(unit.contains(control.center));
         }
     }
 }

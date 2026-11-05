@@ -239,6 +239,25 @@ pub(super) fn drag_value(
         ui.data_mut(|data| data.insert_temp(key, next));
         *value = next.round() as u8;
     }
+    // The wheel is a second, equally direct way to turn a control. A notch is
+    // about a twentieth of the range; Shift makes it finer. The wheel event is
+    // consumed so the page behind a knob does not scroll at the same time.
+    if response.hovered() && !response.dragged() {
+        let scroll = ui.input(|i| i.raw_scroll_delta.y);
+        if scroll.abs() > 0.01 {
+            let fine = if ui.input(|i| i.modifiers.shift) {
+                0.2
+            } else {
+                1.0
+            };
+            let next = (*value as f32 + scroll / 50.0 * range / 20.0 * fine).clamp(0.0, range);
+            *value = next.round() as u8;
+            ui.ctx().input_mut(|input| {
+                input.raw_scroll_delta = Vec2::ZERO;
+                input.smooth_scroll_delta = Vec2::ZERO;
+            });
+        }
+    }
 }
 
 /// Returns true when clicked.
