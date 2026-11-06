@@ -493,7 +493,7 @@ mod tests {
     use super::*;
     use crate::protocol::{Message, Preset, AMP_TO_HOST, FRAME_MARKER, REPORT_SIZE};
 
-    fn channel_one_app() -> App {
+    fn amp_app(model: u16, voice: u8) -> App {
         let ctx = eframe::egui::Context::default();
         crate::ui::theme::install(&ctx);
         let mut raw = [0u8; REPORT_SIZE];
@@ -501,9 +501,10 @@ mod tests {
         raw[1] = AMP_TO_HOST;
         raw[2] = Kind::Amp.code();
         raw[6] = 1;
-        let [low, high] = models::CLEAN_CHANNEL_MODEL.to_le_bytes();
+        let [low, high] = model.to_le_bytes();
         raw[protocol::OFF_MODEL] = low;
         raw[protocol::OFF_MODEL + 1] = high;
+        raw[44..=46].fill(voice);
         let mut live = Preset::new(BANK_LIVE, 0);
         live.add(Message::from_bytes(raw).expect("a valid amp block"));
         let mut app = App::fresh(ctx);
@@ -513,6 +514,10 @@ mod tests {
         app.connected = true;
         app.synced = true;
         app
+    }
+
+    fn channel_one_app() -> App {
+        amp_app(models::CLEAN_CHANNEL_MODEL, 0)
     }
 
     #[test]
@@ -546,6 +551,27 @@ mod tests {
             .and_then(|block| block.model());
         assert_eq!(model, Some(models::CLEAN_CHANNEL_MODEL));
         assert!(app.error.is_some());
+    }
+
+    #[test]
+    fn a_voice_edit_sends_the_model_and_voice_bytes_together() {
+        let mut app = amp_app(0x0079, 0x0b); // British '70s
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.tx = Some(tx);
+        app.apply_edit(Kind::Amp, 44, 3); // '65 Deluxe
+        app.send_live_edits();
+
+        let frame = match rx.try_recv() {
+            Ok(Cmd::Block { code, frame }) if code == Kind::Amp.code() => frame,
+            Ok(_) => panic!("a block write was expected"),
+            Err(error) => panic!("no block write was sent: {error:?}"),
+        };
+        assert_eq!(frame[1], protocol::HOST_CONTROL);
+        assert_eq!(
+            &frame[protocol::OFF_MODEL..protocol::OFF_MODEL + 2],
+            &[0x53, 0x00]
+        );
+        assert_eq!(&frame[44..=46], &[3, 3, 3]);
     }
 
     #[test]

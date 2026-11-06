@@ -178,6 +178,12 @@ voices must be selected before a voice or stompbox will load. There is no host
 frame for that switch in the captures; the editor detects `0x00eb` and explains
 it instead of sending a write that the amp will ignore.
 
+The USB live buffer carries the Channel 2 DSP state. The audible channel is
+selected on the amp itself and is not reported in the captures, so the editor
+cannot tell whether the player is hearing Channel 1 or Channel 2. If a voice
+change is reported by the dump but not heard, the amp's **Channel** button is
+the place to look.
+
 ## Bypassing an effect
 
 Verified on hardware (2026-11-04): FUSE has a fast bypass frame that needs no
@@ -259,7 +265,7 @@ Other reports:
 | --- | --- | --- |
 | `00 00 05 <status>` | answer to a direct-control write, about 1 ms later; 0 means accepted. The value is not echoed | measured |
 | `05 01 <module> <model lo> <model hi> <index> <index> 01 00 <value lo> <value hi>` | one effect parameter; `<module>` was 5 for delay and 6 for reverb, `<index>` is block offset `32 + index`, and `round(value / 257)` is the byte | decoded from the capture |
-| `1d 01 <index> <position>` | selector knob position (`index` 1/2, positions 6/5 with `'65 Deluxe` live) | sent at the end of a dump; whether they also arrive when the knob turns is untested |
+| `1d 01 <index> <position>` | selector knob position. `index` 1 is the Voice knob, 2 the FX-select knob. `position` is the 4-bit Grey code of the 1-based voice position: `0x00` Clean Channel, `0x03` '57 Deluxe, `0x06` '65 Deluxe, `0x0a` British '70s. | sent at the end of a dump; whether they also arrive when the knob turns is untested |
 | `1f 01 00 <n> ...` | state summary before the block stream; the payload after the marker is not decoded | marker known, payload unknown |
 
 `ff c5`, which FUSE uses to ask for the current preset only, returns the full

@@ -173,7 +173,7 @@ pub const KNOBS: &[KnobSpec] = &[
         offset: 44,
         name: "Voice",
         standard: true,
-        hint: "Amp voice 0..12; also stored at offsets 45 and 46.",
+        hint: "Amp voice 0..12. Channel 2 only: on Channel 1 you hear the clean tube channel.",
     },
     KnobSpec {
         offset: 34,
