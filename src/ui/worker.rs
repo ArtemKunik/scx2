@@ -172,7 +172,7 @@ enum Verify {
         index: u8,
         name: String,
         /// The slot as it was before the rename, for the byte comparison.
-        before: Option<Preset>,
+        before: Option<Box<Preset>>,
     },
     UsbGain {
         value: u8,
@@ -180,7 +180,7 @@ enum Verify {
         before: Option<[u8; protocol::REPORT_SIZE]>,
     },
     Restore {
-        source: Vec<Preset>,
+        source: Box<[Preset]>,
         /// A slot the restore started but did not finish, if any.
         partial: Option<(u8, u8)>,
         written: usize,
@@ -203,10 +203,14 @@ pub(crate) fn spawn_worker(
         };
         let outcome = Amp::open(path.as_deref()).and_then(|amp| {
             let banner = amp.handshake().ok().flatten();
+            if let Ok(description) = amp.describe() {
+                eprintln!("amp connected: {description}");
+            }
             send(Ev::Connected(banner));
             run(&amp, &send, &rx)
         });
         if let Err(error) = outcome {
+            eprintln!("amp connection failed or closed: {error:#}");
             send(Ev::Error(format!("{error:#}")));
         }
     });
@@ -377,7 +381,7 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                                 bank: *bank,
                                 index: *index,
                                 name: name.clone(),
-                                before,
+                                before: before.map(Box::new),
                             });
                         }
                     }
@@ -490,7 +494,7 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                                 }) => {
                                     let outcome = verify_rename(
                                         &done.dump,
-                                        before.as_ref(),
+                                        before.as_deref(),
                                         bank,
                                         index,
                                         &name,
@@ -593,7 +597,7 @@ fn finish_restore(
         .filter(|preset| job.done.contains(&(preset.bank, preset.index)))
         .collect();
     *verify = Some(Verify::Restore {
-        source,
+        source: source.into_boxed_slice(),
         partial,
         written: job.written,
         total: job.total,

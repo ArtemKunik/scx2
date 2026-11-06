@@ -120,17 +120,24 @@ impl App {
                                     egui::RichText::new(name).font(semibold(21.0)).color(TEXT),
                                 );
                                 ui.add_space(3.0);
-                                let state = if !loaded {
-                                    "Pick a model to put an effect in this slot."
+                                let (state, state_ink) = if !loaded {
+                                    ("Pick a model to put an effect in this slot.", TEXT_3)
+                                } else if !self.connected {
+                                    (
+                                        "Not connected — this is the demo capture; the amp will not hear it.",
+                                        ERROR,
+                                    )
                                 } else if bypassed {
-                                    "Bypassed — the model and its settings are kept."
+                                    ("Bypassed — the model and its settings are kept.", TEXT_3)
                                 } else if editable {
-                                    "Turn the controls below; the amp hears each change."
+                                    ("Turn the controls below; the amp hears each change.", TEXT_3)
                                 } else {
-                                    "Stored preset — choose the Live Buffer to edit."
+                                    ("Stored preset — choose the Live Buffer to edit.", TEXT_3)
                                 };
                                 ui.label(
-                                    egui::RichText::new(state).font(regular(11.5)).color(TEXT_3),
+                                    egui::RichText::new(state)
+                                        .font(regular(11.5))
+                                        .color(state_ink),
                                 );
                             });
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
@@ -158,7 +165,15 @@ impl App {
                         ui.horizontal_top(|ui| {
                             let (stage, _) =
                                 ui.allocate_exact_size(Vec2::new(art_w, stage_h), Sense::hover());
-                            stage_panel(ui.painter(), art, stage, look.as_ref(), &frame, loaded);
+                            stage_panel(
+                                ui.painter(),
+                                art,
+                                stage,
+                                look.as_ref(),
+                                &frame,
+                                loaded,
+                                bypassed,
+                            );
 
                             ui.add_space(24.0);
                             ui.vertical(|ui| {
@@ -306,6 +321,7 @@ impl App {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn stage_panel(
     painter: &egui::Painter,
     art: &Art,
@@ -313,13 +329,21 @@ fn stage_panel(
     look: Option<&fx::Pedal>,
     frame: &[u8; protocol::REPORT_SIZE],
     loaded: bool,
+    bypassed: bool,
 ) {
     painter.rect_filled(rect, 12.0, Color32::from_rgb(17, 16, 15));
     painter.rect_stroke(rect, 12.0, stroke(1.0, HAIRLINE));
     let stage = rect.shrink2(Vec2::new(8.0, 12.0));
     match look {
         Some(look) => {
-            pedalstage::paint(painter, art, stage, look, &frame[protocol::OFF_PARAMS..]);
+            pedalstage::paint(
+                painter,
+                art,
+                stage,
+                look,
+                &frame[protocol::OFF_PARAMS..],
+                bypassed,
+            );
         }
         None => {
             let center = stage.center();
@@ -548,7 +572,8 @@ fn power_pill(ui: &mut Ui, bypassed: bool, interactive: bool) -> bool {
     } else {
         Sense::hover()
     };
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(82.0, 30.0), sense);
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(82.0, 30.0), Sense::hover());
+    let response = ui.interact(rect, Id::new("fx-power"), sense);
     let (fill, hover, ink) = if bypassed {
         (
             Color32::from_white_alpha(10),
@@ -583,4 +608,116 @@ fn power_pill(ui: &mut Ui, bypassed: bool, interactive: bool) -> bool {
         return response.clicked();
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use eframe::egui::{Event, PointerButton, Pos2, RawInput, Rect};
+
+    fn live_stomp_app(ctx: &egui::Context) -> App {
+        super::super::theme::install(ctx);
+        let mut app = App::fresh(ctx.clone());
+        let mut raw = [0u8; protocol::REPORT_SIZE];
+        raw[0] = protocol::FRAME_MARKER;
+        raw[1] = protocol::AMP_TO_HOST;
+        raw[2] = Kind::Stomp.code();
+        raw[3] = BANK_LIVE;
+        raw[4] = 0;
+        raw[6] = 1;
+        raw[protocol::OFF_MODEL] = 0x07;
+        raw[protocol::OFF_MODEL + 1] = 0x00;
+        raw[protocol::OFF_SLOT] = 3;
+        let mut preset = protocol::Preset::new(BANK_LIVE, 0);
+        preset.add(protocol::Message::from_bytes(raw).expect("a valid stomp block"));
+        let mut dump = protocol::Dump::new();
+        dump.insert(preset);
+        app.dump = dump;
+        app.original = app.dump.clone();
+        app.selected = (BANK_LIVE, 0);
+        app.synced = true;
+        app.fx_editor = Some(Kind::Stomp);
+        app
+    }
+
+    fn screen_input() -> RawInput {
+        RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, egui::vec2(1400.0, 860.0))),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn clicking_the_power_pill_toggles_the_bypass_byte() {
+        let ctx = egui::Context::default();
+        let mut app = live_stomp_app(&ctx);
+        let art = super::super::art::Art::new(&ctx, 1.0);
+        let base = screen_input();
+
+        // Lay out once, then read the pill's rect from the previous frame.
+        let _ = ctx.run(base.clone(), |ctx| app.effect_editor(ctx, &art));
+        let mut pill = Rect::NOTHING;
+        let _ = ctx.run(base.clone(), |ctx| {
+            if let Some(response) = ctx.read_response(Id::new("fx-power")) {
+                pill = response.rect;
+            }
+            app.effect_editor(ctx, &art);
+        });
+        assert!(pill.is_positive(), "the power pill was laid out");
+
+        let mut press = base.clone();
+        press.events = vec![
+            Event::PointerMoved(pill.center()),
+            Event::PointerButton {
+                pos: pill.center(),
+                button: PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            },
+        ];
+        let _ = ctx.run(press, |ctx| app.effect_editor(ctx, &art));
+        let mut release = base;
+        release.events = vec![
+            Event::PointerMoved(pill.center()),
+            Event::PointerButton {
+                pos: pill.center(),
+                button: PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            },
+        ];
+        let _ = ctx.run(release, |ctx| app.effect_editor(ctx, &art));
+
+        let bypass = app
+            .dump
+            .get(BANK_LIVE, 0)
+            .and_then(|preset| preset.block(Kind::Stomp))
+            .map(|block| block.byte(protocol::OFF_BYPASS));
+        assert_eq!(bypass, Some(1), "the click must toggle bypass");
+    }
+
+    #[test]
+    fn a_bypass_toggle_sends_the_fast_frame_when_connected() {
+        let ctx = egui::Context::default();
+        let mut app = live_stomp_app(&ctx);
+        let (tx, rx) = std::sync::mpsc::channel();
+        app.tx = Some(tx);
+        app.connected = true;
+
+        app.apply_edit(Kind::Stomp, protocol::OFF_BYPASS, 1);
+        app.send_live_edits();
+
+        match rx.try_recv() {
+            Ok(super::super::worker::Cmd::Bypass {
+                kind,
+                slot,
+                bypassed,
+            }) => {
+                assert_eq!(kind, Kind::Stomp);
+                assert_eq!(slot, 3, "the stomp sits in chain slot 3");
+                assert!(bypassed);
+            }
+            _ => panic!("a bypass frame was expected"),
+        }
+    }
 }

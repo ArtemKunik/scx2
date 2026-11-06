@@ -82,24 +82,32 @@ impl App {
         } else {
             ""
         };
-        let place = match key.0 {
-            BANK_LIVE => {
-                if dirty {
-                    "What the amp is playing now · unsaved edits".to_string()
-                } else {
-                    "What the amp is playing now".to_string()
+        let place = if !self.connected {
+            format!("Not connected — {}", self.source)
+        } else {
+            match key.0 {
+                BANK_LIVE => {
+                    if dirty {
+                        "What the amp is playing now · unsaved edits".to_string()
+                    } else {
+                        "What the amp is playing now".to_string()
+                    }
                 }
+                BANK_AMP => format!("Amp preset {}{saved}", key.1),
+                BANK_FX => format!("FX preset {}{saved}", key.1),
+                _ => String::new(),
             }
-            BANK_AMP => format!("Amp preset {}{saved}", key.1),
-            BANK_FX => format!("FX preset {}{saved}", key.1),
-            _ => String::new(),
         };
 
         ui.horizontal_centered(|ui| {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 ui.label(egui::RichText::new(title).font(semibold(20.0)).color(TEXT));
-                ui.label(egui::RichText::new(place).font(regular(11.5)).color(TEXT_2));
+                ui.label(
+                    egui::RichText::new(place)
+                        .font(regular(11.5))
+                        .color(if self.connected { TEXT_2 } else { ERROR }),
+                );
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {

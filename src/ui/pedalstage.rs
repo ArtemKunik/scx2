@@ -14,9 +14,16 @@ use super::paint::{spaced, spaced_italic};
 use super::theme::*;
 
 /// Draw a large version of `fx` inside `area`, returning the enclosure rect.
-pub(super) fn paint(painter: &Painter, art: &Art, area: Rect, fx: &Pedal, values: &[u8]) -> Rect {
+pub(super) fn paint(
+    painter: &Painter,
+    art: &Art,
+    area: Rect,
+    fx: &Pedal,
+    values: &[u8],
+    bypassed: bool,
+) -> Rect {
     if fx.form == Form::Box {
-        return boxed(painter, area, fx, values);
+        return boxed(painter, area, fx, values, bypassed);
     }
     // The larger units are already wide (a tape echo, a reverb tank, a rack).
     // They read well at their native size, so centre one instead of redrawing
@@ -25,7 +32,7 @@ pub(super) fn paint(painter: &Painter, art: &Art, area: Rect, fx: &Pedal, values
     area
 }
 
-fn boxed(painter: &Painter, area: Rect, fx: &Pedal, values: &[u8]) -> Rect {
+fn boxed(painter: &Painter, area: Rect, fx: &Pedal, values: &[u8], bypassed: bool) -> Rect {
     let max_w = area.width().min(310.0);
     let max_h = area.height().min(390.0);
     let mut width = max_w.min(max_h * 0.80);
@@ -159,8 +166,20 @@ fn boxed(painter: &Painter, area: Rect, fx: &Pedal, values: &[u8]) -> Rect {
     // The jewel and the footswitch, both enlarged.
     let jewel = unit.right_top() + Vec2::new(-25.0, 25.0);
     painter.circle_filled(jewel, 8.5, Color32::from_black_alpha(150));
-    painter.circle_filled(jewel, 5.6, fx.led.gamma_multiply(0.9));
-    painter.circle_filled(jewel - Vec2::new(1.2, 1.2), 2.0, Color32::WHITE);
+    painter.circle_filled(
+        jewel,
+        5.6,
+        fx.led.gamma_multiply(if bypassed { 0.15 } else { 0.9 }),
+    );
+    painter.circle_filled(
+        jewel - Vec2::new(1.2, 1.2),
+        2.0,
+        if bypassed {
+            Color32::from_white_alpha(55)
+        } else {
+            Color32::WHITE
+        },
+    );
 
     let button = Pos2::new(unit.center().x, unit.bottom() - 38.0);
     painter.circle_filled(
@@ -188,6 +207,9 @@ fn boxed(painter: &Painter, area: Rect, fx: &Pedal, values: &[u8]) -> Rect {
         0.2,
     );
 
+    if bypassed {
+        painter.rect_filled(unit, 8.0, Color32::from_black_alpha(45));
+    }
     unit
 }
 
