@@ -81,6 +81,6 @@ pub use frames::{
     as_host_frame, boot_banner, bypass, execute_model_change, handshake_step1, handshake_step2,
     hex, name_change, parse_hex, patch_change, recall_preset, request_dump, retarget, save_preset,
 };
-pub use kind::Kind;
+pub use kind::{bank_kinds, Kind};
 pub use message::Message;
 pub use preset::Preset;

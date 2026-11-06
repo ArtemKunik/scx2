@@ -108,3 +108,17 @@ impl Kind {
         })
     }
 }
+
+/// The sonic blocks a preset bank stores.
+///
+/// Bank 1 (amp presets) keeps the amp and stomp blocks; bank 2 (FX presets)
+/// keeps modulation, delay and reverb. The `state`/`misc` reports in a dump are
+/// derived, and a live buffer carries every block regardless of the target
+/// bank, so a store read-back must compare only these.
+pub fn bank_kinds(bank: u8) -> &'static [Kind] {
+    match bank {
+        super::BANK_AMP => &[Kind::Amp, Kind::Stomp],
+        super::BANK_FX => &[Kind::Mod, Kind::Delay, Kind::Reverb],
+        _ => &[],
+    }
+}

@@ -294,6 +294,15 @@ delay are byte-identical; unknown fields preserved in the file.
 
 **Goal:** Match FUSE's SCX2 sub-preset dialogs.
 
+**State:** shipped (2026-11-06). Sidebar section headers: **Save voice…**
+(Amp Presets), **Save effects…** (FX Presets) and **Save CH1…** (Live). All
+three reuse the Save-to-Amp dialog with the bank fixed, the slot grid limited to
+what that bank owns, the name field, overwrite warning, `.fuse` backup and
+read-back. SAVE CH1 writes amp slot 16 — the factory `Clean Channel` slot — and
+refuses unless the live buffer reports the clean-channel model `0x00eb`. The
+read-back now compares only the blocks the target bank stores (amp/stomp for
+bank 1, mod/delay/reverb for bank 2).
+
 * **SAVE EFFECTS** writes the FX bank (bank 2): mod/delay/reverb, with a name.
 * **SAVE VOICE** writes the amp/voice bank (bank 1): amp + stomp, with a name.
 * **SAVE CH1** saves the clean-channel/voice settings (FUSE's `SaveMidKnobDialog`
@@ -529,6 +538,9 @@ replacement. Do not build network code for a dead service.
    all firmware builds?
 7. Can a cancelled restore be made resumable, or is "stop after current block"
    the honest contract?
+8. SAVE CH1 is wired to amp slot 16 because the capture has `Clean Channel`
+   (`0x00eb`) there. Confirm on hardware that FUSE's SAVE CH1 is a store to
+   amp 16 and that channel 1 must be selected first.
 
 ## 8. Suggested order
 

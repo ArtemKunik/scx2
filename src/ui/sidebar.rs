@@ -5,6 +5,7 @@ use eframe::egui::{
 };
 
 use super::paint::elided;
+use super::store::StoreMode;
 use super::theme::*;
 use super::toolbar::{tool_button, ButtonKind};
 use super::App;
@@ -69,6 +70,9 @@ impl App {
                 let mut clicked = None;
                 let mut rename = None;
                 let mut import = false;
+                let mut save_clean = false;
+                let mut save_voice = false;
+                let mut save_effects = false;
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -87,18 +91,36 @@ impl App {
                                         .color(TEXT_3),
                                 );
                                 if *title == "Live" {
-                                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                        ui.add_space(8.0);
-                                        if ui
-                                            .small_button("Import…")
-                                            .on_hover_text(
-                                                "Copy modules from a preset into the live buffer",
-                                            )
-                                            .clicked()
-                                        {
-                                            import = true;
-                                        }
-                                    });
+                                    if section_action(
+                                        ui,
+                                        "Import…",
+                                        "Copy modules from a preset into the live buffer",
+                                    ) {
+                                        import = true;
+                                    }
+                                    if section_action(
+                                        ui,
+                                        "Save CH1…",
+                                        "Save channel 1 into the amp's Clean Channel slot",
+                                    ) {
+                                        save_clean = true;
+                                    }
+                                } else if *title == "Amp Presets" {
+                                    if section_action(
+                                        ui,
+                                        "Save voice…",
+                                        "Save the amp, cabinet and stomp into a voice slot",
+                                    ) {
+                                        save_voice = true;
+                                    }
+                                } else if *title == "FX Presets"
+                                    && section_action(
+                                        ui,
+                                        "Save effects…",
+                                        "Save mod, delay and reverb into an FX preset",
+                                    )
+                                {
+                                    save_effects = true;
                                 }
                             });
                             ui.add_space(4.0);
@@ -127,6 +149,15 @@ impl App {
                 }
                 if import {
                     self.open_import_dialog();
+                }
+                if save_clean {
+                    self.open_sub_preset(StoreMode::Clean);
+                }
+                if save_voice {
+                    self.open_sub_preset(StoreMode::Voice);
+                }
+                if save_effects {
+                    self.open_sub_preset(StoreMode::Effects);
                 }
             });
     }
@@ -223,4 +254,13 @@ fn subtitle(preset: &protocol::Preset) -> String {
         })
         .collect();
     parts.join(" · ")
+}
+
+/// A small action button on the right of a sidebar section header.
+fn section_action(ui: &mut Ui, label: &str, tip: &str) -> bool {
+    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+        ui.add_space(8.0);
+        ui.small_button(label).on_hover_text(tip).clicked()
+    })
+    .inner
 }

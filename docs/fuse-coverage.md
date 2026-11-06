@@ -43,7 +43,7 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | Save a preset file | yes | Save As writes JSON or `.fuse`. |
 | Save the live buffer to an amp slot | yes | `scx2 store` is the reference and is verified; the editor's **Save to Amp…** sends the same frame, warns before replacing a named slot, offers a `.fuse` backup and checks the read-back. |
 | Rename a stored preset | yes | `scx2 rename` is the reference; right-click a stored preset in the editor and choose **Rename…**. Only the name block is written, and the other bytes are compared afterwards. |
-| Save effects / voice sub-presets | partial | Storing to bank 2 / bank 1 works from the CLI. FUSE's SAVE EFFECTS, SAVE CH2 VOICE and SAVE CH1 dialogs are not in the editor. |
+| Save effects / voice sub-presets | yes | Sidebar actions: **Save effects…** (bank 2), **Save voice…** (bank 1 voices 0–15), **Save CH1…** (bank 1 slot 16, Clean Channel, only when channel 1 is selected). |
 | Delete / overwrite a preset | partial | Storing overwrites a slot. FUSE itself says amp presets cannot be deleted, only overwritten. |
 | Preset browser | missing | FUSE filters PC vs. amp presets, browses previous/next, searches and sorts. `scx2` lists the current dump only. |
 | Preset info dialog | missing | No description/tags/genres/author editing. |
@@ -88,8 +88,8 @@ The largest remaining gaps are librarian/device operations, not sound editing:
    frames are wired into the toolbar and sidebar, each with a read-back check.
 2. **Preset browser and new/duplicate/overwrite.** Add PC-preset browsing,
    search/filter, previous/next and a "New Preset" action.
-3. **Partial import and sub-presets.** Partial import is done; SAVE EFFECTS /
-   SAVE VOICE still need the slot-grid dialogs.
+3. **Partial import and sub-presets.** Done: the import dialog and the three
+   save dialogs (effects, voice, CH1).
 4. **USB Gain.** Read and write the `0x0D` misc block at offset 16 and add a
    knob to the advanced amp panel.
 5. **Preset metadata / local library.** Description, tags, genres, author and a

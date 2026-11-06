@@ -238,6 +238,23 @@ The frame is the verified one; this checklist covers the dialog around it.
 7. Repeat offline: the import must apply to the local live buffer and survive
    **Save As**.
 
+### Save effects / voice / CH1 (M3.2)
+
+1. With effects loaded on the Live Buffer, click **Save effects…** in the FX
+   Presets header. The bank must be fixed to FX, the grid limited to slots
+   0–15, and the dialog must name the modules it writes (mod, delay, reverb).
+2. Save to a slot, let the read-back finish, then `scx2 dump` and confirm the
+   amp bank is byte-identical to before.
+3. Click **Save voice…** in the Amp Presets header. The grid must stop at slot
+   15 (slot 16 is the clean channel). Save, then confirm the FX bank is
+   unchanged.
+4. Switch the amp to channel 2 and open **Save CH1…**: the dialog must warn and
+   leave Save disabled. Switch to channel 1: the target must be amp 16
+   (`Clean Channel`) and Save must enable.
+5. Save CH1, let the read-back finish, and confirm the clean channel survives a
+   power cycle.
+6. Offline, all three dialogs must print their frames as dry runs.
+
 ### MIDI foot controller (M8.1)
 
 1. Connect a class-compliant MIDI controller, open **MIDI**, and confirm it is

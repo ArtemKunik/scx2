@@ -588,7 +588,14 @@ fn verify_store(dump: &Dump, bank: u8, index: u8, name: &str) -> Result<String, 
     if stored.name != name.trim() {
         problems.push(format!("the name reads {:?}", stored.name));
     }
-    let changes = protocol::diff_payload(live, stored);
+    // A bank stores only its own blocks: the amp/stomp of bank 1, the effects
+    // of bank 2. The live buffer has all of them, so comparing the rest would
+    // report a mismatch for every effect a voice save legitimately drops.
+    let kinds = protocol::bank_kinds(bank);
+    let changes: Vec<_> = protocol::diff_payload(live, stored)
+        .into_iter()
+        .filter(|change| kinds.contains(&change.kind))
+        .collect();
     if let Some(first) = changes.first() {
         problems.push(format!(
             "{} byte(s) differ, first at {} offset {} (0x{:02x} -> 0x{:02x})",
@@ -599,7 +606,10 @@ fn verify_store(dump: &Dump, bank: u8, index: u8, name: &str) -> Result<String, 
             first.after
         ));
     }
-    for (kind, model) in protocol::models_missing_from(live, stored) {
+    for (kind, model) in protocol::models_missing_from(live, stored)
+        .into_iter()
+        .filter(|(kind, _)| kinds.contains(kind))
+    {
         problems.push(format!(
             "the {} model 0x{model:04x} is missing",
             kind.label()
@@ -953,5 +963,57 @@ mod tests {
         let mismatches = verify_restore(&dump, &source);
         assert_eq!(mismatches.len(), 1);
         assert!(mismatches[0].contains("does not report"), "{mismatches:?}");
+    }
+
+    /// A live buffer with every block, plus a stored slot carrying only what
+    /// its bank keeps.
+    fn dump_with_bank_slot(stored_bank: u8) -> Dump {
+        let mut dump = Dump::new();
+        dump.add_raw(&protocol::name_change(BANK_LIVE, 0, "live"));
+        dump.add_raw(&report(Kind::Amp, BANK_LIVE, 0, 0x21, 0x63));
+        dump.add_raw(&report(Kind::Stomp, BANK_LIVE, 0, 0x0007, 0x80));
+        dump.add_raw(&report(Kind::Mod, BANK_LIVE, 0, 0x0012, 0x81));
+        dump.add_raw(&report(Kind::Delay, BANK_LIVE, 0, 0x002b, 0x82));
+        dump.add_raw(&report(Kind::Reverb, BANK_LIVE, 0, 0x0024, 0x83));
+        dump.add_raw(&protocol::name_change(stored_bank, 4, "Stored"));
+        match stored_bank {
+            protocol::BANK_AMP => {
+                dump.add_raw(&report(Kind::Amp, stored_bank, 4, 0x21, 0x63));
+                dump.add_raw(&report(Kind::Stomp, stored_bank, 4, 0x0007, 0x80));
+            }
+            protocol::BANK_FX => {
+                dump.add_raw(&report(Kind::Mod, stored_bank, 4, 0x0012, 0x81));
+                dump.add_raw(&report(Kind::Delay, stored_bank, 4, 0x002b, 0x82));
+                dump.add_raw(&report(Kind::Reverb, stored_bank, 4, 0x0024, 0x83));
+            }
+            _ => {}
+        }
+        dump
+    }
+
+    #[test]
+    fn a_voice_store_does_not_miss_the_effects_a_voice_slot_never_keeps() {
+        let dump = dump_with_bank_slot(protocol::BANK_AMP);
+        let outcome = verify_store(&dump, protocol::BANK_AMP, 4, "Stored");
+        assert!(outcome.is_ok(), "{outcome:?}");
+    }
+
+    #[test]
+    fn an_effects_store_does_not_miss_the_amp_block_it_never_keeps() {
+        let dump = dump_with_bank_slot(protocol::BANK_FX);
+        let outcome = verify_store(&dump, protocol::BANK_FX, 4, "Stored");
+        assert!(outcome.is_ok(), "{outcome:?}");
+    }
+
+    #[test]
+    fn an_effects_store_still_catches_a_changed_reverb() {
+        let mut dump = dump_with_bank_slot(protocol::BANK_FX);
+        dump.get_mut(protocol::BANK_FX, 4)
+            .and_then(|preset| preset.block_mut(Kind::Reverb))
+            .expect("the stored reverb exists")
+            .set_byte(32, 0x40);
+        let error = verify_store(&dump, protocol::BANK_FX, 4, "Stored")
+            .expect_err("the reverb kept an older value");
+        assert!(error.contains("reverb offset 32"), "{error}");
     }
 }

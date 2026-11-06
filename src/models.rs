@@ -9,6 +9,12 @@
 
 use crate::protocol::Kind;
 
+/// The amp model the SCX2 reports on channel 1, the clean tube channel.
+///
+/// A `.fuse`-era dump has it in amp slot 16 (`Clean Channel`), which is where
+/// SAVE CH1 writes.
+pub const CLEAN_CHANNEL_MODEL: u16 = 0x00eb;
+
 pub const AMP_MODELS: &[(u16, &str)] = &[
     (0x0000, "None"),
     (0x0067, "'57 Deluxe"),

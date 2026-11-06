@@ -128,6 +128,11 @@ stomp, modulation, delay, reverb — from a `.fuse` preset or a backup into the
 live buffer. Only the ticked modules move; every other block stays
 byte-identical, and an unknown model is shown and left unticked until you
 choose it.
+**Save effects…**, **Save voice…** and **Save CH1…** in the sidebar headers are
+FUSE's sub-preset dialogs: bank 2 (mod/delay/reverb), bank 1 voices 0–15
+(amp/cabinet/stomp), and the Clean Channel slot (amp 16, only when channel 1 is
+selected). They share the Save-to-Amp dialog and read-back, which compares only
+the blocks the target bank stores.
 
 **Tuner** opens a polyphonic guitar tuner fed by the amp's USB audio output.
 Click the button in the toolbar and strum: all six strings of standard tuning are
