@@ -17,7 +17,12 @@ use crate::protocol::{self, Dump, Kind, Notice, Preset, BANK_LIVE};
 use crate::transport::Amp;
 
 /// Fallback for anything the amp does not announce.
-const RESYNC: Duration = Duration::from_secs(5);
+///
+/// A full dump is 195 reports and takes about two seconds, and the amp already
+/// announces its own state changes and knob moves. Polling it every few
+/// seconds made the amp read almost continuously while someone was playing;
+/// this is only a safety net for a missed announcement.
+const RESYNC: Duration = Duration::from_secs(30);
 /// Do not start a routine dump while someone is turning a knob.
 const QUIET: Duration = Duration::from_secs(1);
 /// Give up waiting for a write's acknowledgement after this long.
@@ -25,6 +30,13 @@ const ACK_WAIT: Duration = Duration::from_millis(150);
 const BLOCK_GAP: Duration = Duration::from_millis(60);
 const SOON: Duration = Duration::from_millis(150);
 const DUMP_LIMIT: Duration = Duration::from_secs(10);
+/// Read the live buffer once more after a write, beyond the local grace.
+///
+/// A fast bypass frame or a block write has no read-back of its own. The first
+/// dump 400 ms later confirms an accepted write; this second one lets the UI
+/// retire a value the amp never took instead of keeping it on screen until the
+/// routine resync.
+const RECHECK: Duration = Duration::from_secs(6);
 /// A real dump has 34 presets; anything far below that was cut short.
 const COMPLETE_DUMP: usize = 20;
 
@@ -248,6 +260,7 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
     let mut quiet_until = Instant::now() - QUIET;
     let mut collecting: Option<Collecting> = None;
     let mut dump_soon = Some(Instant::now());
+    let mut recheck_at: Option<Instant> = None;
     let mut next_resync = Instant::now() + RESYNC;
 
     loop {
@@ -330,6 +343,10 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                     if let Some(dump) = collecting.as_mut() {
                         dump.stale = true;
                     }
+                    // Read the block back promptly; the fast frame has no ack
+                    // we can compare against on its own.
+                    dump_soon = Some(now + Duration::from_millis(400));
+                    recheck_at = Some(now + RECHECK);
                 } else if let Some((_, frame)) = blocks_out.pop_first() {
                     amp.write_report(&frame)?;
                     // The amp buffers a block write until the execute frame.
@@ -340,6 +357,10 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                     if let Some(dump) = collecting.as_mut() {
                         dump.stale = true;
                     }
+                    // Do not wait for the 30 s fallback to learn whether the
+                    // amp kept the block; read it back once it has applied it.
+                    dump_soon = Some(now + Duration::from_millis(400));
+                    recheck_at = Some(now + RECHECK);
                 } else if let Some(write) = device_out.pop_front() {
                     // These frames read or rewrite stored memory, so they only
                     // go out once every queued live edit has landed.
@@ -558,11 +579,15 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
             && bypasses_out.is_empty()
             && device_out.is_empty()
             && restore.is_none();
+        let recheck = recheck_at.is_some_and(|at| now >= at);
         let asked = dump_soon.is_some_and(|at| now >= at);
         let routine = now >= next_resync && now - last_activity >= QUIET;
-        if collecting.is_none() && idle && (asked || routine) {
+        if collecting.is_none() && idle && (asked || recheck || routine) {
             amp.write_report(&protocol::request_dump())?;
             dump_soon = None;
+            if recheck {
+                recheck_at = None;
+            }
             collecting = Some(Collecting {
                 dump: Dump::new(),
                 started: now,

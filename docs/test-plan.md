@@ -99,6 +99,18 @@ stored preset, because this only writes the live buffer.
 Confirmed on 2026-11-03: voice index 44 went `0x03` -> `0x00` -> `0x03` with
 matching dumps. `--no-execute` reproduces the earlier "amp ignores it" case.
 
+### Channel 1 is not writable (verified 2026-11-06)
+
+With the amp on channel 1, the live amp block reports `Clean Channel`
+(`0x00eb`). Sending it a different voice, a different amp model, or a stompbox
+block is acknowledged but not applied: a fresh dump still shows `0x00eb` and an
+empty stomp. Mod, delay and reverb writes do apply. Press the front-panel
+**Channel** button to select channel 2 before testing voice or stomp loads.
+
+The editor now shows an amber "Clean Channel" line and refuses those edits,
+so a test should check that the line appears and that the Green Box picker
+explains the switch instead of silently reverting after the next dump.
+
 ## 5. Capture a FUSE edit + save (optional but very useful)
 
 If you still have a way to run FUSE, record USBPcap while you change a

@@ -24,6 +24,29 @@ impl App {
         protocol::diff_dumps(&self.original, &self.dump)
     }
 
+    /// True when the amp is playing channel 1, the clean tube channel.
+    ///
+    /// Channel 1 is not a DSP voice: the amp ignores writes to its amp and
+    /// stomp blocks, and only the effects section (mod, delay, reverb) answers.
+    /// The app uses this to explain why a voice or stompbox did not load
+    /// instead of letting it vanish on the next dump.
+    pub(crate) fn on_clean_channel(&self) -> bool {
+        self.connected
+            && self
+                .dump
+                .live()
+                .and_then(|live| live.block(Kind::Amp))
+                .and_then(|block| block.model())
+                == Some(models::CLEAN_CHANNEL_MODEL)
+    }
+
+    fn note_clean_channel(&mut self, what: &str) {
+        self.error = Some(format!(
+            "The amp reports the Clean Channel. Switch to Channel 2 with the amp's Channel \
+             button (and turn its Voice knob off Clean Channel), then change the {what}."
+        ));
+    }
+
     /// True when the dump differs from the last opened/saved/amp state.
     ///
     /// Library metadata counts too: it is saved in the backup, so losing it on
@@ -288,6 +311,10 @@ impl App {
     /// had, so switching from a chorus to a phaser does not inherit the
     /// chorus's rate and depth.
     pub(crate) fn set_effect_model(&mut self, kind: Kind, model: u16) {
+        if kind == Kind::Stomp && model != 0 && self.on_clean_channel() {
+            self.note_clean_channel("stompbox");
+            return;
+        }
         self.begin_edit();
         let (bank, index) = self.selected;
         let before = self.dump.get(bank, index).cloned();
@@ -342,6 +369,13 @@ impl App {
     }
 
     pub(crate) fn apply_edit(&mut self, kind: Kind, offset: usize, value: u8) {
+        // Channel 1 is the analogue clean channel. The amp accepts these
+        // frames but does not apply them to the DSP, so a local edit would
+        // only last until the next dump. Say so instead.
+        if kind == Kind::Amp && self.on_clean_channel() {
+            self.note_clean_channel("amp voice or control");
+            return;
+        }
         let (bank, index) = self.selected;
         let unchanged = self
             .dump
@@ -451,5 +485,83 @@ impl App {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{Message, Preset, AMP_TO_HOST, FRAME_MARKER, REPORT_SIZE};
+
+    fn channel_one_app() -> App {
+        let ctx = eframe::egui::Context::default();
+        crate::ui::theme::install(&ctx);
+        let mut raw = [0u8; REPORT_SIZE];
+        raw[0] = FRAME_MARKER;
+        raw[1] = AMP_TO_HOST;
+        raw[2] = Kind::Amp.code();
+        raw[6] = 1;
+        let [low, high] = models::CLEAN_CHANNEL_MODEL.to_le_bytes();
+        raw[protocol::OFF_MODEL] = low;
+        raw[protocol::OFF_MODEL + 1] = high;
+        let mut live = Preset::new(BANK_LIVE, 0);
+        live.add(Message::from_bytes(raw).expect("a valid amp block"));
+        let mut app = App::fresh(ctx);
+        app.dump.insert(live.clone());
+        app.original.insert(live);
+        app.selected = (BANK_LIVE, 0);
+        app.connected = true;
+        app.synced = true;
+        app
+    }
+
+    #[test]
+    fn channel_one_refuses_a_stompbox_model() {
+        let mut app = channel_one_app();
+        assert!(app.on_clean_channel());
+        app.set_effect_model(Kind::Stomp, 0x00ba);
+        let model = app
+            .dump
+            .get(BANK_LIVE, 0)
+            .and_then(|preset| preset.block(Kind::Stomp))
+            .and_then(|block| block.model());
+        assert_eq!(model, None, "the amp would ignore it on channel 1");
+        assert!(
+            app.error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("Clean Channel"),
+            "the error must name the channel"
+        );
+    }
+
+    #[test]
+    fn channel_one_refuses_an_amp_control() {
+        let mut app = channel_one_app();
+        app.apply_edit(Kind::Amp, protocol::OFF_MODEL, 0x67);
+        let model = app
+            .dump
+            .get(BANK_LIVE, 0)
+            .and_then(|preset| preset.block(Kind::Amp))
+            .and_then(|block| block.model());
+        assert_eq!(model, Some(models::CLEAN_CHANNEL_MODEL));
+        assert!(app.error.is_some());
+    }
+
+    #[test]
+    fn channel_one_still_loads_the_effects_section() {
+        let mut app = channel_one_app();
+        app.set_effect_model(Kind::Reverb, 0x003a);
+        let model = app
+            .dump
+            .get(BANK_LIVE, 0)
+            .and_then(|preset| preset.block(Kind::Reverb))
+            .and_then(|block| block.model());
+        assert_eq!(
+            model,
+            Some(0x003a),
+            "mod, delay and reverb work on channel 1"
+        );
+        assert!(app.error.is_none());
     }
 }

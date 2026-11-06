@@ -82,21 +82,30 @@ impl App {
         } else {
             ""
         };
-        let place = if !self.connected {
-            format!("Not connected — {}", self.source)
+        let (place, place_ink) = if !self.connected {
+            (format!("Not connected — {}", self.source), ERROR)
+        } else if self.on_clean_channel() {
+            (
+                "Clean Channel — switch to a Channel 2 voice for stompboxes and amp models"
+                    .to_string(),
+                AMBER,
+            )
         } else {
-            match key.0 {
-                BANK_LIVE => {
-                    if dirty {
-                        "What the amp is playing now · unsaved edits".to_string()
-                    } else {
-                        "What the amp is playing now".to_string()
+            (
+                match key.0 {
+                    BANK_LIVE => {
+                        if dirty {
+                            "What the amp is playing now · unsaved edits".to_string()
+                        } else {
+                            "What the amp is playing now".to_string()
+                        }
                     }
-                }
-                BANK_AMP => format!("Amp preset {}{saved}", key.1),
-                BANK_FX => format!("FX preset {}{saved}", key.1),
-                _ => String::new(),
-            }
+                    BANK_AMP => format!("Amp preset {}{saved}", key.1),
+                    BANK_FX => format!("FX preset {}{saved}", key.1),
+                    _ => String::new(),
+                },
+                TEXT_2,
+            )
         };
 
         ui.horizontal_centered(|ui| {
@@ -106,7 +115,7 @@ impl App {
                 ui.label(
                     egui::RichText::new(place)
                         .font(regular(11.5))
-                        .color(if self.connected { TEXT_2 } else { ERROR }),
+                        .color(place_ink),
                 );
             });
 

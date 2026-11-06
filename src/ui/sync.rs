@@ -17,27 +17,42 @@ const FLASH: f32 = 1.4;
 impl App {
     /// The amp's full state. The live buffer stays on screen unless the person
     /// chose a stored preset, and a value being dragged is never pulled away.
+    ///
+    /// A dump is not allowed to undo a local edit that the amp has not caught
+    /// up with yet. That matters twice: the person keeps seeing what they set,
+    /// and the app does not mistake the amp's older copy for an unsent change
+    /// and write it again on every dump.
     pub(crate) fn on_dump(&mut self, mut dump: Dump) {
-        let held = self.held_value();
+        let first = !self.synced;
         let reported = dump.live().cloned();
-        if let Some(live) = &reported {
-            self.note_live_changes(live);
-        }
-        // A dump can arrive before the amp has picked up a local write. Lay
-        // those local values back over its older copy of the live buffer.
-        let pending = self.live_pending_values();
-        overlay_pending(&mut dump, &pending);
-        if let Some((offset, value)) = held {
-            set_live_byte(&mut dump, offset, value);
+        // The last state we sent or accepted, kept as the baseline for live
+        // edits. The amp's copy only replaces the bytes nothing local covers.
+        let saved = self.original.clone();
+        let baseline_live = saved.live().cloned();
+
+        if !first {
+            // Preset Info lives beside the device bytes. Keep it across dumps;
+            // the amp never reports it and would otherwise erase it.
+            copy_info(&mut dump, &self.dump);
         }
         self.original = dump.clone();
-        if let Some(reported) = reported {
-            if let Some(slot) = self.original.get_mut(BANK_LIVE, 0) {
-                *slot = reported;
+        self.dump = dump;
+        if !first {
+            // The library metadata is not the amp's, so the baseline keeps the
+            // last saved copy. That keeps "unsaved info" visible as a change.
+            for preset in self.original.presets.values_mut() {
+                if let Some(old) = saved.get(preset.bank, preset.index) {
+                    preset.info = old.info.clone();
+                }
+            }
+            if let Some(reported) = reported {
+                if let Some(baseline) = baseline_live {
+                    self.original.insert(baseline);
+                }
+                self.accept_live(&reported);
             }
         }
-        self.dump = dump;
-        if !self.synced || self.dump.get(self.selected.0, self.selected.1).is_none() {
+        if first || self.dump.get(self.selected.0, self.selected.1).is_none() {
             self.selected = (BANK_LIVE, 0);
         }
         self.synced = true;
@@ -45,21 +60,69 @@ impl App {
     }
 
     /// The live buffer alone, available long before the rest of a dump.
-    pub(crate) fn on_live(&mut self, mut live: Preset) {
-        let reported = live.clone();
-        self.note_live_changes(&reported);
-        let pending = self.live_pending_values();
-        overlay_preset(&mut live, &pending);
-        if let Some((offset, value)) = self.held_value() {
-            if let Some(block) = live.block_mut(Kind::Amp) {
-                block.set_byte(offset, value);
+    pub(crate) fn on_live(&mut self, live: Preset) {
+        if !self.synced {
+            self.dump.insert(live.clone());
+            self.original.insert(live);
+            return;
+        }
+        self.accept_live(&live);
+    }
+
+    /// Fold the amp's live buffer into the one on screen.
+    ///
+    /// A pending local byte stays until the amp reports the same value, or
+    /// until [`PENDING_TTL`] runs out. Every other byte follows the amp, so a
+    /// front-panel knob still moves the panel. Confirmed values clear their
+    /// pending entry; a value the amp never takes is reported once.
+    fn accept_live(&mut self, incoming: &Preset) {
+        self.expire_pending(incoming);
+        self.note_live_changes(incoming);
+
+        let pending: BTreeMap<(u8, usize), u8> = self
+            .pending_live
+            .iter()
+            .map(|(key, value)| (*key, value.value))
+            .collect();
+
+        if self.original.get(BANK_LIVE, 0).is_none() {
+            self.original.insert(incoming.clone());
+        }
+        let Some(display) = self.dump.get_mut(BANK_LIVE, 0) else {
+            return;
+        };
+        display.name = incoming.name.clone();
+        let Some(baseline) = self.original.get_mut(BANK_LIVE, 0) else {
+            return;
+        };
+
+        let mut confirmed = Vec::new();
+        for block in incoming.blocks.values() {
+            let kind = block.kind();
+            let code = kind.code();
+            let (Some(target), Some(base)) =
+                (display.ensure_block(kind), baseline.ensure_block(kind))
+            else {
+                continue;
+            };
+            for offset in 0..protocol::REPORT_SIZE {
+                let amp = block.as_bytes()[offset];
+                if let Some(local) = pending.get(&(code, offset)) {
+                    // The local value is what was sent. Keep it in both the
+                    // panel and the baseline until the amp confirms it.
+                    target.set_byte(offset, *local);
+                    base.set_byte(offset, *local);
+                    if amp != *local {
+                        continue;
+                    }
+                    confirmed.push((code, offset));
+                }
+                target.set_byte(offset, amp);
+                base.set_byte(offset, amp);
             }
         }
-        if let Some(slot) = self.original.get_mut(BANK_LIVE, 0) {
-            *slot = reported;
-        }
-        if let Some(slot) = self.dump.get_mut(BANK_LIVE, 0) {
-            *slot = live;
+        for key in confirmed {
+            self.pending_live.remove(&key);
         }
     }
 
@@ -93,29 +156,68 @@ impl App {
         self.selected = (BANK_LIVE, 0);
     }
 
-    /// The local values still waiting for the amp, after dropping stale ones.
-    fn live_pending_values(&mut self) -> BTreeMap<(u8, usize), u8> {
+    /// Drop local values the amp has had long enough to accept.
+    ///
+    /// If the amp's copy still differs, the write did not take. Report that
+    /// once instead of keeping the panel on a value the amp is not playing.
+    fn expire_pending(&mut self, incoming: &Preset) {
         let now = Instant::now();
-        self.pending_live
-            .retain(|_, pending| now.duration_since(pending.seen) < PENDING_TTL);
-        self.pending_live
+        let expired: Vec<_> = self
+            .pending_live
             .iter()
-            .map(|((code, offset), pending)| ((*code, *offset), pending.value))
-            .collect()
+            .filter(|(_, pending)| now.duration_since(pending.seen) >= PENDING_TTL)
+            .map(|(key, pending)| (*key, pending.value))
+            .collect();
+        if expired.is_empty() {
+            return;
+        }
+        let mut rejected = None;
+        for (key, value) in expired {
+            self.pending_live.remove(&key);
+            let amp = incoming
+                .blocks
+                .get(&key.0)
+                .map(|block| block.as_bytes()[key.1]);
+            // The whole amp panel is snapshotted around a block write, so a
+            // difference there can be a stale echo or a hand on a front-panel
+            // knob. Only model/slot/effect changes are worth a warning.
+            let structural = key.0 != Kind::Amp.code() || key.1 < protocol::OFF_PARAMS;
+            if structural && amp.is_some_and(|amp| amp != value) {
+                rejected.get_or_insert(key);
+            }
+        }
+        if let Some(key) = rejected {
+            self.note_rejected(key);
+        }
     }
 
-    fn held_value(&self) -> Option<(usize, u8)> {
-        let offset = self.active_offset?;
-        let block = self.dump.live()?.block(Kind::Amp)?;
-        Some((offset, block.as_bytes()[offset]))
+    fn note_rejected(&mut self, key: (u8, usize)) {
+        let kind = Kind::from_code(key.0);
+        if self.on_clean_channel() && matches!(kind, Kind::Amp | Kind::Stomp) {
+            self.error = Some(
+                "The amp did not keep that change: it reports the Clean Channel. \
+                 Switch to Channel 2 (and turn its Voice knob off Clean Channel), then try again."
+                    .into(),
+            );
+        } else {
+            self.status = format!("The amp did not keep the {} change.", kind.label());
+        }
     }
 
     fn note_live_changes(&mut self, incoming: &Preset) {
-        let changes = match self.original.live() {
-            Some(known) if self.synced => protocol::diff_presets(known, incoming),
-            _ => Vec::new(),
+        if !self.synced {
+            return;
+        }
+        let Some(known) = self.dump.live().cloned() else {
+            return;
         };
-        for change in changes {
+        for change in protocol::diff_presets(&known, incoming) {
+            if self
+                .pending_live
+                .contains_key(&(change.kind.code(), change.offset))
+            {
+                continue;
+            }
             let is_param = change.kind == Kind::Amp && change.offset >= protocol::OFF_PARAMS;
             if is_param && self.active_offset != Some(change.offset) {
                 self.note_change(change.offset, change.before, change.after);
@@ -138,17 +240,11 @@ fn set_live_byte(dump: &mut Dump, offset: usize, value: u8) {
     }
 }
 
-/// Put local values back over the amp's copy of the live buffer.
-fn overlay_pending(dump: &mut Dump, pending: &BTreeMap<(u8, usize), u8>) {
-    if let Some(live) = dump.get_mut(BANK_LIVE, 0) {
-        overlay_preset(live, pending);
-    }
-}
-
-fn overlay_preset(live: &mut Preset, pending: &BTreeMap<(u8, usize), u8>) {
-    for ((code, offset), value) in pending {
-        if let Some(block) = live.ensure_block(Kind::from_code(*code)) {
-            block.set_byte(*offset, *value);
+/// Keep the editor's library metadata when the amp's dump replaces the bytes.
+fn copy_info(target: &mut Dump, source: &Dump) {
+    for preset in target.presets.values_mut() {
+        if let Some(old) = source.get(preset.bank, preset.index) {
+            preset.info = old.info.clone();
         }
     }
 }
@@ -193,6 +289,7 @@ mod tests {
     use super::*;
     use crate::protocol::REPORT_SIZE;
     use crate::ui::worker::apply_newer;
+    use eframe::egui;
 
     fn dump_with_live_volume(value: u8) -> Dump {
         let mut report = [0u8; REPORT_SIZE];
@@ -208,6 +305,22 @@ mod tests {
 
     fn live_volume(dump: &Dump) -> u8 {
         dump.live().unwrap().block(Kind::Amp).unwrap().as_bytes()[32]
+    }
+
+    fn live_preset(value: u8) -> Preset {
+        dump_with_live_volume(value).live().unwrap().clone()
+    }
+
+    fn live_app(volume: u8) -> App {
+        let ctx = egui::Context::default();
+        crate::ui::theme::install(&ctx);
+        let mut app = App::fresh(ctx);
+        app.dump = dump_with_live_volume(volume);
+        app.original = app.dump.clone();
+        app.selected = (BANK_LIVE, 0);
+        app.synced = true;
+        app.connected = true;
+        app
     }
 
     #[test]
@@ -246,12 +359,158 @@ mod tests {
 
     #[test]
     fn a_pending_local_value_beats_an_older_dump() {
-        let mut dump = dump_with_live_volume(0x10);
-        overlay_pending(&mut dump, &BTreeMap::from([((Kind::Amp.code(), 32), 0x40)]));
+        let mut app = live_app(0x40);
+        app.pending_live.insert(
+            (Kind::Amp.code(), 32),
+            crate::ui::app::PendingLive {
+                value: 0x40,
+                seen: Instant::now(),
+            },
+        );
+        app.accept_live(&live_preset(0x10));
         assert_eq!(
-            live_volume(&dump),
+            live_volume(&app.dump),
             0x40,
             "the local value must survive the dump"
         );
+        assert_eq!(
+            live_volume(&app.original),
+            0x40,
+            "the baseline must stay on the value that was sent"
+        );
+    }
+
+    #[test]
+    fn a_dump_that_confirms_a_value_clears_the_pending_entry() {
+        let mut app = live_app(0x40);
+        app.pending_live.insert(
+            (Kind::Amp.code(), 32),
+            crate::ui::app::PendingLive {
+                value: 0x40,
+                seen: Instant::now(),
+            },
+        );
+        app.accept_live(&live_preset(0x40));
+        assert!(
+            app.pending_live.is_empty(),
+            "a confirmed value is no longer pending"
+        );
+        assert_eq!(live_volume(&app.dump), 0x40);
+        assert_eq!(live_volume(&app.original), 0x40);
+    }
+
+    #[test]
+    fn a_dump_does_not_turn_a_sent_value_into_a_resend() {
+        let mut app = live_app(0x40);
+        app.pending_live.insert(
+            (Kind::Amp.code(), 32),
+            crate::ui::app::PendingLive {
+                value: 0x40,
+                seen: Instant::now(),
+            },
+        );
+        // The amp still reports the value from before the write.
+        app.accept_live(&live_preset(0x10));
+        assert!(
+            app.pending().is_empty(),
+            "the amp's older copy must not look like an unsent edit"
+        );
+    }
+
+    #[test]
+    fn a_dump_does_not_replace_a_pending_local_value() {
+        let mut app = live_app(0x40);
+        app.pending_live.insert(
+            (Kind::Amp.code(), 32),
+            crate::ui::app::PendingLive {
+                value: 0x40,
+                seen: Instant::now(),
+            },
+        );
+        // The full-dump path replaces the live preset with the amp's copy
+        // before merging; the pending value must be laid back over it.
+        app.on_dump(dump_with_live_volume(0x10));
+        assert_eq!(
+            live_volume(&app.dump),
+            0x40,
+            "a full dump must not replace the local value"
+        );
+        assert!(
+            app.pending().is_empty(),
+            "and it must not look like an unsent edit either"
+        );
+    }
+
+    #[test]
+    fn a_pending_value_the_amp_never_takes_follows_the_amp_after_the_grace() {
+        let mut app = live_app(0x40);
+        app.pending_live.insert(
+            (Kind::Amp.code(), 32),
+            crate::ui::app::PendingLive {
+                value: 0x40,
+                seen: Instant::now() - PENDING_TTL - std::time::Duration::from_secs(1),
+            },
+        );
+        app.accept_live(&live_preset(0x10));
+        assert!(app.pending_live.is_empty());
+        assert_eq!(
+            live_volume(&app.dump),
+            0x10,
+            "once the grace runs out, the amp's copy wins"
+        );
+    }
+
+    #[test]
+    fn a_model_change_the_amp_rejects_is_reported() {
+        let mut app = live_app(0x40);
+        for dump in [&mut app.dump, &mut app.original] {
+            if let Some(block) = dump
+                .get_mut(BANK_LIVE, 0)
+                .and_then(|preset| preset.ensure_block(Kind::Stomp))
+            {
+                block.set_byte(protocol::OFF_MODEL, 0xba);
+                block.set_byte(protocol::OFF_MODEL + 1, 0);
+            }
+        }
+        app.pending_live.insert(
+            (Kind::Stomp.code(), protocol::OFF_MODEL),
+            crate::ui::app::PendingLive {
+                value: 0xba,
+                seen: Instant::now() - PENDING_TTL - std::time::Duration::from_secs(1),
+            },
+        );
+        let mut incoming = live_preset(0x40);
+        incoming.ensure_block(Kind::Stomp);
+        app.accept_live(&incoming);
+        assert!(
+            app.status.contains("stomp"),
+            "a rejected model change must be named: {:?}",
+            app.status
+        );
+    }
+
+    #[test]
+    fn amp_dumps_keep_the_library_metadata() {
+        let mut app = live_app(0x10);
+        let mut stored = Preset::new(crate::protocol::BANK_AMP, 1);
+        stored.info.description = "my notes".into();
+        app.dump.insert(stored.clone());
+        app.original.insert(stored);
+        app.selected = (crate::protocol::BANK_AMP, 1);
+
+        let mut incoming = dump_with_live_volume(0x10);
+        incoming.insert(Preset::new(crate::protocol::BANK_AMP, 1));
+        app.on_dump(incoming);
+
+        assert_eq!(
+            app.dump
+                .get(crate::protocol::BANK_AMP, 1)
+                .unwrap()
+                .info
+                .description,
+            "my notes",
+            "the amp never reports Preset Info, so the dump must keep it"
+        );
+        assert_eq!(app.selected, (crate::protocol::BANK_AMP, 1));
     }
 }

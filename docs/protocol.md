@@ -163,6 +163,21 @@ but `scx2 diff` will show it after any write session.
 The UI and `scx2 apply` / `scx2 restore` send the execute frame automatically;
 `--no-execute` disables it for experiments.
 
+### Channel 1 is not a DSP target
+
+Measured on hardware (2026-11-06, firmware `May 30 2013`): while the live amp
+block reports `Clean Channel` (`0x00eb`, voice `0x00`), the amp acknowledges
+block writes to the amp (`0x05`) and stomp (`0x06`) blocks but does not apply
+them. A fresh dump still reports `0x00eb` and an empty stomp, and direct-control
+parameter writes to the same model also report "no change". Mod, delay and
+reverb blocks **do** apply on channel 1.
+
+This is the amp's analogue clean channel, not a DSP voice. Channel 2 (the
+front-panel **Channel** button or the footswitch) and one of its modelling
+voices must be selected before a voice or stompbox will load. There is no host
+frame for that switch in the captures; the editor detects `0x00eb` and explains
+it instead of sending a write that the amp will ignore.
+
 ## Bypassing an effect
 
 Verified on hardware (2026-11-04): FUSE has a fast bypass frame that needs no

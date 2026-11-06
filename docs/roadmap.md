@@ -555,6 +555,11 @@ replacement. Do not build network code for a dead service.
 8. SAVE CH1 is wired to amp slot 16 because the capture has `Clean Channel`
    (`0x00eb`) there. Confirm on hardware that FUSE's SAVE CH1 is a store to
    amp 16 and that channel 1 must be selected first.
+9. Is there a host frame for switching between channel 1 and channel 2? The
+   amp ignores amp/stomp block writes while `0x00eb` is live (measured
+   2026-11-06), so the editor asks the person to press the front-panel Channel
+   button. A frame that switches channels would make voice and stomp loads one
+   action instead of two.
 
 ## 8. Suggested order
 

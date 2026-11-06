@@ -120,13 +120,18 @@ impl App {
                                     egui::RichText::new(name).font(semibold(21.0)).color(TEXT),
                                 );
                                 ui.add_space(3.0);
-                                let (state, state_ink) = if !loaded {
-                                    ("Pick a model to put an effect in this slot.", TEXT_3)
-                                } else if !self.connected {
+                                let (state, state_ink) = if !self.connected {
                                     (
                                         "Not connected — this is the demo capture; the amp will not hear it.",
                                         ERROR,
                                     )
+                                } else if kind == Kind::Stomp && self.on_clean_channel() {
+                                    (
+                                        "The amp reports the Clean Channel. Switch to a Channel 2 voice to load stompboxes.",
+                                        AMBER,
+                                    )
+                                } else if !loaded {
+                                    ("Pick a model to put an effect in this slot.", TEXT_3)
                                 } else if bypassed {
                                     ("Bypassed — the model and its settings are kept.", TEXT_3)
                                 } else if editable {
