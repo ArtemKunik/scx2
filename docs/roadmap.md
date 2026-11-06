@@ -264,6 +264,14 @@ independent files; overwrite only changes the target slot.
 
 **Goal:** FUSE's IMPORT dialog for the SCX2.
 
+**State:** shipped (2026-11-06). **Import…** in the sidebar's Live header takes
+a `.fuse` or JSON backup, lets you pick the source preset, and offers the
+amplifier, stomp, modulation, delay and reverb modules with their model names.
+Only ticked (and known-model) modules are ticked by default; imported blocks are
+retargeted to bank 0, a ticked effect that the source lacks is cleared, and
+unselected blocks stay byte-identical. USB Gain is not part of a preset, so it
+is not in this dialog.
+
 **UI:** choose a source `.fuse`/backup preset; select modules:
 
 * Amplifier (voice + advanced amp, cabinet),

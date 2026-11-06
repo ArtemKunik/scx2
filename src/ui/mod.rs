@@ -13,6 +13,7 @@ mod fxeditor;
 mod fxmodels;
 mod fxpanel;
 mod hardware;
+mod import;
 mod knobs;
 mod midi;
 mod name;

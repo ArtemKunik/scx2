@@ -16,6 +16,7 @@ use crate::recorder::Recorder;
 use crate::tuner::Tuner;
 
 use super::art::Art;
+use super::import::ImportDialog;
 use super::rename::RenameDialog;
 use super::restore::RestoreDialog;
 use super::store::StoreDialog;
@@ -98,6 +99,8 @@ pub struct App {
     pub(crate) store: Option<StoreDialog>,
     /// The "Rename Preset" dialog, when it is open.
     pub(crate) rename: Option<RenameDialog>,
+    /// The "Import Modules" dialog, when it is open.
+    pub(crate) import: Option<ImportDialog>,
     /// The "Restore Backup" dialog, when it is open or running.
     pub(crate) restore: Option<RestoreDialog>,
     /// A device operation the worker has not confirmed yet, and what it was.
@@ -204,6 +207,7 @@ impl App {
             path: None,
             store: None,
             rename: None,
+            import: None,
             restore: None,
             waiting: None,
             synced_at: None,

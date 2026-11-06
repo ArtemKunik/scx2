@@ -221,6 +221,23 @@ The frame is the verified one; this checklist covers the dialog around it.
 6. Restore only the FX bank and confirm the amp presets are unchanged.
 7. Power-cycle and confirm the restored slots survived.
 
+### Import modules from a preset (M3.1)
+
+1. On the Live Buffer, click **Import…** in the sidebar's Live header. Pick a
+   `.fuse` preset, then a JSON backup with several presets: the source combo
+   must list every preset in the file.
+2. Tick only **Reverb** and import. The status bar must name the reverb, and a
+   `scx2 dump` before/after must show only the reverb block changed.
+3. Import only **Amplifier**: the voice, cabinet and advanced amp must follow,
+   while stomp/mod/delay/reverb stay byte-identical.
+4. Pick a source preset with no stomp and tick **Stomp**: the live stomp must
+   be cleared.
+5. Open a file with an unknown model: the row must say "unknown model" and be
+   unticked; ticking it must copy the raw id.
+6. Undo the import: every block must return to its previous bytes.
+7. Repeat offline: the import must apply to the local live buffer and survive
+   **Save As**.
+
 ### MIDI foot controller (M8.1)
 
 1. Connect a class-compliant MIDI controller, open **MIDI**, and confirm it is

@@ -27,7 +27,7 @@ impl App {
         if bank != BANK_AMP && bank != BANK_FX {
             return;
         }
-        if self.amp_busy() || self.restore_dialog_open() {
+        if self.amp_busy() || self.restore_dialog_open() || self.import.is_some() {
             self.status = "Another amp operation is still running; try again in a moment.".into();
             return;
         }

@@ -33,7 +33,7 @@ pub(crate) struct StoreDialog {
 impl App {
     /// Open the dialog on the current selection, or on the first empty slot.
     pub(super) fn open_store_dialog(&mut self) {
-        if self.amp_busy() || self.restore_dialog_open() {
+        if self.amp_busy() || self.restore_dialog_open() || self.import.is_some() {
             self.status = "Another amp operation is still running; try again in a moment.".into();
             return;
         }

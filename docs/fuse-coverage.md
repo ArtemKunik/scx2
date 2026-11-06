@@ -29,7 +29,7 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | Signal-chain reordering | n/a | The SCX2 has four fixed, typed effect slots. FUSE's orderable-chain UI is for other products. |
 | Undo / redo | yes | Whole-dump snapshots. |
 | Open/save `.fuse` | yes | Whole-preset XML import/export. |
-| Partial import from another preset | missing | FUSE's `IMPORT` can take selected amp/effect modules from another preset; `scx2` replaces the whole live buffer. |
+| Partial import from another preset | yes | **Import…** in the sidebar takes a `.fuse`/backup preset and copies only the ticked amp/stomp/mod/delay/reverb blocks into the live buffer; unselected blocks stay untouched. Unknown models are shown and left unticked. |
 | Preset metadata | missing | FUSE has description, tags, genres, author, rating and comments. `scx2` only keeps the 32-byte name. |
 | Amp theme / visual skin | missing | `scx2` picks a period look from the voice; FUSE had an `Amp Theme` menu item. |
 
@@ -88,9 +88,8 @@ The largest remaining gaps are librarian/device operations, not sound editing:
    frames are wired into the toolbar and sidebar, each with a read-back check.
 2. **Preset browser and new/duplicate/overwrite.** Add PC-preset browsing,
    search/filter, previous/next and a "New Preset" action.
-3. **Partial import and sub-presets.** Let a `.fuse` or another preset
-   contribute only selected amp/effect modules, and expose SAVE EFFECTS /
-   SAVE VOICE like FUSE's SCX2 dialogs.
+3. **Partial import and sub-presets.** Partial import is done; SAVE EFFECTS /
+   SAVE VOICE still need the slot-grid dialogs.
 4. **USB Gain.** Read and write the `0x0D` misc block at offset 16 and add a
    knob to the advanced amp panel.
 5. **Preset metadata / local library.** Description, tags, genres, author and a

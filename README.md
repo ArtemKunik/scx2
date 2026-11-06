@@ -123,6 +123,11 @@ buffer is never written.
 `Open` and the drag target accept both JSON backups and Fender FUSE `.fuse`
 files; `Save As` writes JSON for the whole dump, or `.fuse` for the selected
 preset.
+**Import…** in the sidebar's Live header copies selected modules — amplifier,
+stomp, modulation, delay, reverb — from a `.fuse` preset or a backup into the
+live buffer. Only the ticked modules move; every other block stays
+byte-identical, and an unknown model is shown and left unticked until you
+choose it.
 
 **Tuner** opens a polyphonic guitar tuner fed by the amp's USB audio output.
 Click the button in the toolbar and strum: all six strings of standard tuning are

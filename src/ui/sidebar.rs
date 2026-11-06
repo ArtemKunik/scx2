@@ -1,6 +1,8 @@
 //! The preset library and the connection status under it.
 
-use eframe::egui::{self, Align2, Color32, CursorIcon, Margin, Pos2, Sense, Ui, Vec2};
+use eframe::egui::{
+    self, Align, Align2, Color32, CursorIcon, Layout, Margin, Pos2, Sense, Ui, Vec2,
+};
 
 use super::paint::elided;
 use super::theme::*;
@@ -66,6 +68,7 @@ impl App {
                 let selected = self.selected;
                 let mut clicked = None;
                 let mut rename = None;
+                let mut import = false;
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
@@ -83,6 +86,20 @@ impl App {
                                         .font(semibold(11.5))
                                         .color(TEXT_3),
                                 );
+                                if *title == "Live" {
+                                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                        ui.add_space(8.0);
+                                        if ui
+                                            .small_button("Import…")
+                                            .on_hover_text(
+                                                "Copy modules from a preset into the live buffer",
+                                            )
+                                            .clicked()
+                                        {
+                                            import = true;
+                                        }
+                                    });
+                                }
                             });
                             ui.add_space(4.0);
                             for row in rows {
@@ -107,6 +124,9 @@ impl App {
                 }
                 if let Some((bank, index)) = rename {
                     self.open_rename_dialog(bank, index);
+                }
+                if import {
+                    self.open_import_dialog();
                 }
             });
     }
