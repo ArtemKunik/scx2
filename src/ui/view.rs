@@ -81,6 +81,7 @@ pub(super) fn show(app: &mut App, ctx: &egui::Context, art: &Art) {
     app.import_window(ctx);
     app.restore_window(ctx);
     app.usb_gain_window(ctx);
+    app.info_window(ctx);
     app.midi_window(ctx);
     drop_overlay(ctx);
 }

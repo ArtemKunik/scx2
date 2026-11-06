@@ -8,12 +8,94 @@ use super::*;
 // dump model
 // ---------------------------------------------------------------------------
 
+/// FUSE's Preset Info: local library metadata for a preset.
+///
+/// It lives beside the device bytes. A backup carries it, the amp never sees
+/// it, and it is not part of any block or `.fuse` module.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PresetInfo {
+    pub description: String,
+    pub tags: Vec<String>,
+    pub genre: String,
+    pub sub_genres: [String; 2],
+    pub author: String,
+    /// 0 = unrated, 1..=5 stars.
+    pub rating: u8,
+    pub comments: String,
+}
+
+impl PresetInfo {
+    pub fn is_empty(&self) -> bool {
+        self.description.is_empty()
+            && self.tags.is_empty()
+            && self.genre.is_empty()
+            && self.sub_genres.iter().all(|name| name.is_empty())
+            && self.author.is_empty()
+            && self.rating == 0
+            && self.comments.is_empty()
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "description": self.description,
+            "tags": self.tags,
+            "genre": self.genre,
+            "sub_genres": self.sub_genres,
+            "author": self.author,
+            "rating": self.rating,
+            "comments": self.comments,
+        })
+    }
+
+    pub fn from_json(value: &Value) -> Self {
+        let text = |key: &str| {
+            value
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        let tags = value
+            .get("tags")
+            .and_then(Value::as_array)
+            .map(|tags| {
+                tags.iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let subs = value.get("sub_genres").and_then(Value::as_array);
+        let sub_genres = [0usize, 1].map(|index| {
+            subs.and_then(|subs| subs.get(index))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        });
+        PresetInfo {
+            description: text("description"),
+            tags,
+            genre: text("genre"),
+            sub_genres,
+            author: text("author"),
+            rating: value
+                .get("rating")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                .min(5) as u8,
+            comments: text("comments"),
+        }
+    }
+}
+
 /// A preset assembled from its per-block reports.
 #[derive(Debug, Clone, Default)]
 pub struct Preset {
     pub bank: u8,
     pub index: u8,
     pub name: String,
+    /// Library metadata; never written to the amp.
+    pub info: PresetInfo,
     name_message: Option<Message>,
     /// Keyed by kind code so the output order is stable.
     pub blocks: BTreeMap<u8, Message>,
@@ -188,13 +270,17 @@ impl Preset {
             entry.insert("raw_hex".into(), json!(hex(message.as_bytes())));
             blocks.insert(kind.label().to_string(), Value::Object(entry));
         }
-        json!({
+        let mut value = json!({
             "bank": self.bank,
             "index": self.index,
             "name": self.name,
             "name_raw_hex": self.name_message.as_ref().map(|m| hex(m.as_bytes())),
             "blocks": Value::Object(blocks),
-        })
+        });
+        if !self.info.is_empty() {
+            value["info"] = self.info.to_json();
+        }
+        value
     }
 }
 

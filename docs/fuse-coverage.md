@@ -30,7 +30,7 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | Undo / redo | yes | Whole-dump snapshots. |
 | Open/save `.fuse` | yes | Whole-preset XML import/export. |
 | Partial import from another preset | yes | **Import…** in the sidebar takes a `.fuse`/backup preset and copies only the ticked amp/stomp/mod/delay/reverb blocks into the live buffer; unselected blocks stay untouched. Unknown models are shown and left unticked. |
-| Preset metadata | missing | FUSE has description, tags, genres, author, rating and comments. `scx2` only keeps the 32-byte name. |
+| Preset metadata | yes | Description, tags, genres, author, rating and comments live in the backup's `info` object (**Preset Info…**); they never touch a device block and are not written into `.fuse`. |
 | Amp theme / visual skin | missing | `scx2` picks a period look from the voice; FUSE had an `Amp Theme` menu item. |
 
 ## Presets and librarian
@@ -46,7 +46,7 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | Save effects / voice sub-presets | yes | Sidebar actions: **Save effects…** (bank 2), **Save voice…** (bank 1 voices 0–15), **Save CH1…** (bank 1 slot 16, Clean Channel, only when channel 1 is selected). |
 | Delete / overwrite a preset | partial | Storing overwrites a slot. FUSE itself says amp presets cannot be deleted, only overwritten. |
 | Preset browser | missing | FUSE filters PC vs. amp presets, browses previous/next, searches and sorts. `scx2` lists the current dump only. |
-| Preset info dialog | missing | No description/tags/genres/author editing. |
+| Preset info dialog | yes | Right-click a stored preset → **Preset Info…**; saved with the backup, not on the amp. |
 | Backup | partial | `dump` / Save Backup writes a whole-dump JSON. No description, backup list or single-preset selection in the UI. |
 | Restore | yes | `scx2 restore` is the reference; **Restore…** in the editor takes a backup first, writes block by block with progress and cancel, and compares the re-dump with the backup. The backup's live buffer is not written. |
 | Factory restore | missing | FUSE can reset the amp's presets/device state to factory defaults. |
@@ -92,8 +92,8 @@ The largest remaining gaps are librarian/device operations, not sound editing:
    save dialogs (effects, voice, CH1).
 4. **USB Gain.** Done: the misc block's offset 16 is read, written and checked
    from the panel; one hardware check remains.
-5. **Preset metadata / local library.** Description, tags, genres, author and a
-   searchable folder of presets.
+5. **Preset metadata / local library.** Metadata is done (backup `info`); a
+   searchable library folder and browser is still missing.
 6. **Factory restore and firmware update.** Both need boot-mode work and are
    the riskiest items; factory restore should come after a verified recovery
    path.

@@ -90,6 +90,27 @@ impl Dump {
                 }
             }
         }
+        // Library metadata travels beside the device bytes, so attach it once
+        // the presets have been rebuilt from their raw reports.
+        for preset in presets {
+            let (Some(bank), Some(index)) = (
+                preset["bank"]
+                    .as_u64()
+                    .and_then(|bank| u8::try_from(bank).ok()),
+                preset["index"]
+                    .as_u64()
+                    .and_then(|index| u8::try_from(index).ok()),
+            ) else {
+                continue;
+            };
+            let info = PresetInfo::from_json(&preset["info"]);
+            if info.is_empty() {
+                continue;
+            }
+            if let Some(target) = dump.get_mut(bank, index) {
+                target.info = info;
+            }
+        }
         Ok(dump)
     }
 
@@ -184,5 +205,52 @@ mod tests {
         let dump = Dump::from_reports([misc(BANK_AMP, 0x40)]);
         assert!(dump.live_misc().is_none());
         assert_eq!(dump.usb_gain(), None);
+    }
+
+    #[test]
+    fn preset_info_round_trips_without_touching_the_blocks() {
+        let mut raw = [0u8; REPORT_SIZE];
+        raw[0] = FRAME_MARKER;
+        raw[1] = AMP_TO_HOST;
+        raw[2] = Kind::Amp.code();
+        raw[3] = BANK_AMP;
+        raw[4] = 3;
+        raw[6] = 1;
+        raw[OFF_MODEL] = 0x64;
+        raw[OFF_PARAMS] = 0x80;
+
+        let mut preset = Preset::new(BANK_AMP, 3);
+        preset.set_name("Tweed Bassman");
+        preset.add(Message::from_bytes(raw).expect("a valid amp block"));
+        let block = *preset.block(Kind::Amp).expect("the amp block").as_bytes();
+        preset.info = PresetInfo {
+            description: "Edges of breakup".into(),
+            tags: vec!["blues".into(), "clean".into()],
+            genre: "Blues".into(),
+            sub_genres: ["Chicago".into(), "Modern".into()],
+            author: "A. Player".into(),
+            rating: 4,
+            comments: "A favourite".into(),
+        };
+        let info = preset.info.clone();
+
+        let mut dump = Dump::new();
+        dump.insert(preset);
+        let text = serde_json::to_string(&dump.to_json()).expect("a backup");
+        let back = Dump::from_json(&text).expect("the backup loads");
+
+        let reloaded = back.get(BANK_AMP, 3).expect("the slot");
+        assert_eq!(reloaded.info, info);
+        assert_eq!(
+            reloaded.block(Kind::Amp).expect("the amp block").as_bytes(),
+            &block,
+            "metadata must not move a device byte"
+        );
+    }
+
+    #[test]
+    fn an_empty_info_is_not_written_to_the_backup() {
+        let preset = Preset::new(BANK_AMP, 3);
+        assert!(preset.to_json().get("info").is_none());
     }
 }

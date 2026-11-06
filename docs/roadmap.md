@@ -352,6 +352,13 @@ reconnect; no other block changes.
 
 **Goal:** FUSE's Preset Info dialog: description, tags, genres, author.
 
+**State:** shipped (2026-11-06). Right-click a stored preset → **Preset Info…**:
+description, tags, author, genre plus two sub-genres, a 0–5 rating and comments.
+The device name and slot are shown read-only. The info is stored in the
+backup's per-preset `info` object, never in a block: JSON save, reload and
+copy keep it, and a `.fuse` export keeps only the device name (open question 4).
+Info edits mark the dump dirty and are one undo step.
+
 **Storage:** local library metadata (sidecar/index), not device bytes. The
 32-byte device name remains the only name the amp stores.
 

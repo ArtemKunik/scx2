@@ -69,6 +69,7 @@ impl App {
                 let selected = self.selected;
                 let mut clicked = None;
                 let mut rename = None;
+                let mut info = None;
                 let mut import = false;
                 let mut save_clean = false;
                 let mut save_voice = false;
@@ -135,6 +136,10 @@ impl App {
                                             rename = Some(row.key);
                                             ui.close_menu();
                                         }
+                                        if ui.button("Preset Info…").clicked() {
+                                            info = Some(row.key);
+                                            ui.close_menu();
+                                        }
                                     });
                                 }
                             }
@@ -146,6 +151,9 @@ impl App {
                 }
                 if let Some((bank, index)) = rename {
                     self.open_rename_dialog(bank, index);
+                }
+                if let Some((bank, index)) = info {
+                    self.open_preset_info(bank, index);
                 }
                 if import {
                     self.open_import_dialog();

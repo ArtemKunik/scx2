@@ -25,8 +25,21 @@ impl App {
     }
 
     /// True when the dump differs from the last opened/saved/amp state.
+    ///
+    /// Library metadata counts too: it is saved in the backup, so losing it on
+    /// close would be the same kind of loss as an unsent knob move.
     pub(crate) fn dirty(&self) -> bool {
-        !self.pending().is_empty()
+        !self.pending().is_empty() || self.metadata_edited()
+    }
+
+    /// True when a preset's info differs from the last loaded/saved copy.
+    fn metadata_edited(&self) -> bool {
+        self.dump.presets().any(|preset| {
+            self.original
+                .get(preset.bank, preset.index)
+                .map(|original| original.info != preset.info)
+                .unwrap_or(true)
+        })
     }
 
     /// Snapshot the dump before an edit, coalescing a continuous drag.

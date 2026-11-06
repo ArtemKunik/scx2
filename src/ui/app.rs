@@ -17,6 +17,7 @@ use crate::tuner::Tuner;
 
 use super::art::Art;
 use super::import::ImportDialog;
+use super::info::PresetInfoDialog;
 use super::rename::RenameDialog;
 use super::restore::RestoreDialog;
 use super::store::StoreDialog;
@@ -104,6 +105,8 @@ pub struct App {
     pub(crate) import: Option<ImportDialog>,
     /// The "USB Gain" dialog, when it is open.
     pub(crate) usb_gain: Option<UsbGainDialog>,
+    /// The "Preset Info" dialog, when it is open.
+    pub(crate) info: Option<PresetInfoDialog>,
     /// The "Restore Backup" dialog, when it is open or running.
     pub(crate) restore: Option<RestoreDialog>,
     /// A device operation the worker has not confirmed yet, and what it was.
@@ -212,6 +215,7 @@ impl App {
             rename: None,
             import: None,
             usb_gain: None,
+            info: None,
             restore: None,
             waiting: None,
             synced_at: None,
@@ -399,6 +403,7 @@ impl App {
             || self.restore_dialog_open()
             || self.import.is_some()
             || self.usb_gain.is_some()
+            || self.info.is_some()
     }
 
     /// Show the slot an operation wrote, now that the dump has the amp's own

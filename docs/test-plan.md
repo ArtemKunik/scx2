@@ -270,6 +270,19 @@ The frame is the verified one; this checklist covers the dialog around it.
 7. If the amp ignores the block write, capture the FUSE interaction and adjust
    the direction/execute bytes before shipping.
 
+### Preset info (M4.2)
+
+1. Right-click a stored preset → **Preset Info…**. The header must show the
+   device name and slot read-only.
+2. Fill description, author, tags (comma separated), genre, both sub-genres, a
+   rating and comments. Save: the title dot must appear.
+3. **Save As** a JSON backup and reopen it. Every field must come back, and the
+   device blocks must be byte-identical to before.
+4. Save As a `.fuse` and reopen it: the device name and sound survive, but the
+   info is not part of `.fuse`; the dot stays until the info is saved in a
+   backup.
+5. Undo after saving info: the previous fields must come back.
+
 ### MIDI foot controller (M8.1)
 
 1. Connect a class-compliant MIDI controller, open **MIDI**, and confirm it is

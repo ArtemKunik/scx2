@@ -88,4 +88,4 @@ pub use frames::{
 };
 pub use kind::{bank_kinds, Kind};
 pub use message::Message;
-pub use preset::Preset;
+pub use preset::{Preset, PresetInfo};

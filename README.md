@@ -114,7 +114,9 @@ about to replace a named slot, offers to export that slot as a `.fuse` first,
 and reads the slot back afterwards, comparing every payload byte and the name.
 Right-click a stored preset in the sidebar to **Rename…** it: only the `0x04`
 name block and an execute frame are written, and the read-back checks that no
-other byte moved.
+other byte moved. The same menu has **Preset Info…** for description, tags,
+genres, author, rating and comments; that lives in the JSON backup's `info`
+object, never in a device block (and not in a `.fuse` export).
 **Restore…** writes a JSON backup back to the amp. It lists every slot it will
 replace, saves the current amp state to a backup first, then writes block by
 block with a progress bar and a cancel that stops between blocks; afterwards it
