@@ -226,15 +226,31 @@ The amp's raw HID node (`/dev/hidraw*`) is root-only until udev is told
 otherwise. Install the rule once, then replug the amp:
 
 ```console
+sudo packaging/udev/install.sh
+scx2 scan
+```
+
+The script installs `70-scx2.rules`, removes the obsolete `99-scx2.rules` that
+older revisions used, reloads udev and applies the ACL to the current nodes.
+The manual equivalent is:
+
+```console
 sudo cp packaging/udev/70-scx2.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger --action=add --subsystem-match=hidraw
 scx2 scan
 ```
 
+The rule number matters. `uaccess` is applied by `73-seat-late.rules`, so a
+rule numbered `99` adds the tag too late on a normal plug; that is why the old
+`99-scx2.rules` only worked after a manual `--action=add`. Keep the rule below
+73 (`70-scx2.rules` is the shipped name).
+
 Use `--action=add`: a plain `udevadm trigger` sends `change` events, and udev
 deliberately keeps the existing permissions for those, so the ACL never appears.
-Replugging the amp works too.
+Replugging the amp works too. The editor also retries a permission-denied open
+for two seconds, so starting it in the same moment as the plug does not drop it
+into the demo capture.
 
 If `scx2 scan --all` lists nothing at all, the machine is not exposing any
 `/dev/hidraw*` nodes (`ls /dev/hidraw*`) — common in VMs without USB

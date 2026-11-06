@@ -98,6 +98,9 @@ SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1ed8", ATTRS{idProduct}=="000e", TAG+="ua
 ```
 
 ```console
+sudo packaging/udev/install.sh
+# or manually:
+sudo cp packaging/udev/70-scx2.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger --action=add --subsystem-match=hidraw
 # a plain `udevadm trigger` sends change events, which keep the old
@@ -105,6 +108,12 @@ sudo udevadm trigger --action=add --subsystem-match=hidraw
 # Replugging the amp works too. Then:
 ls -l /dev/hidraw*        # shows + for the logged-in user via uaccess
 ```
+
+The filename must sort before `73-seat-late.rules`, which applies the
+`uaccess` ACL. A `99-*` rule tags the device too late on a normal plug; that
+was the old `99-scx2.rules`, and `install.sh` removes it. The editor retries a
+permission-denied open for two seconds to cover the small window between the
+kernel creating the node and udev applying the ACL.
 
 `TAG+="uaccess"` relies on systemd-logind. On systems without it, use
 `MODE="0660", GROUP="plugdev"` (Debian/Ubuntu) or the local `wheel` group, and

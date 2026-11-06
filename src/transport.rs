@@ -4,6 +4,7 @@
 //! swapping, no Zadig, the Windows in-box HID driver is enough.
 
 use std::ffi::CString;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -72,8 +73,37 @@ pub fn scan(fender_only: bool) -> Result<Vec<DeviceSummary>> {
     Ok(devices)
 }
 
+/// udev applies the `uaccess` ACL a moment after the kernel creates the
+/// hidraw node. An app that opens the amp immediately after it is plugged in
+/// can lose that race and get EACCES even though the rule is installed, so
+/// wait for the ACL instead of dropping straight into the demo capture.
+const OPEN_RETRIES: usize = 20;
+const OPEN_RETRY_DELAY: Duration = Duration::from_millis(100);
+
 /// Find the amp, preferring `path` when given.
 fn open_device(path: Option<&str>) -> Result<HidDevice> {
+    let mut attempt = 0;
+    loop {
+        match open_device_once(path) {
+            Ok(device) => return Ok(device),
+            Err(error) if attempt < OPEN_RETRIES && permission_denied(&error) => {
+                attempt += 1;
+                thread::sleep(OPEN_RETRY_DELAY);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
+/// Whether an open failure is the transient udev/permission race.
+fn permission_denied(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        let text = cause.to_string();
+        text.contains("Permission denied") || text.contains("os error 13")
+    })
+}
+
+fn open_device_once(path: Option<&str>) -> Result<HidDevice> {
     let api = HidApi::new().context("initialising hidapi")?;
     let device = match path {
         Some(path) => {
@@ -209,5 +239,25 @@ impl Amp {
             info.vendor_id(),
             info.product_id()
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::permission_denied;
+
+    #[test]
+    fn permission_denied_matches_hidraw_eacces() {
+        let error = anyhow::anyhow!(
+            "could not open the amp [1ed8:000e]: hidapi error: failed to open device \
+             with path /dev/hidraw5: Permission denied (os error 13)"
+        );
+        assert!(permission_denied(&error));
+    }
+
+    #[test]
+    fn permission_denied_ignores_other_failures() {
+        let error = anyhow::anyhow!("could not open the amp [1ed8:000e]: device not found");
+        assert!(!permission_denied(&error));
     }
 }
