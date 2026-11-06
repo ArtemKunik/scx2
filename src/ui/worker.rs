@@ -46,6 +46,11 @@ pub(crate) enum Cmd {
     Store { bank: u8, index: u8, name: String },
     /// Rewrite a stored slot's name without touching its sound.
     Rename { bank: u8, index: u8, name: String },
+    /// Write the live misc block's USB gain and read it back.
+    UsbGain {
+        value: u8,
+        frame: [u8; protocol::REPORT_SIZE],
+    },
     /// Write stored presets from a backup, one report at a time.
     Restore { presets: Vec<Preset> },
     /// Stop a running restore after the block already sent.
@@ -75,6 +80,10 @@ pub(crate) enum Ev {
         index: u8,
         outcome: Result<String, String>,
     },
+    /// The USB gain was written; `outcome` carries the read-back result.
+    UsbGainDone {
+        outcome: Result<String, String>,
+    },
     /// Block `done` of `total` was written to the amp.
     RestoreProgress {
         done: usize,
@@ -88,8 +97,20 @@ pub(crate) enum Ev {
 
 /// A device write queued for the worker, in request order.
 enum DeviceWrite {
-    Store { bank: u8, index: u8, name: String },
-    Rename { bank: u8, index: u8, name: String },
+    Store {
+        bank: u8,
+        index: u8,
+        name: String,
+    },
+    Rename {
+        bank: u8,
+        index: u8,
+        name: String,
+    },
+    UsbGain {
+        value: u8,
+        frame: [u8; protocol::REPORT_SIZE],
+    },
 }
 
 /// A restore in progress: every report to write, in backup order.
@@ -152,6 +173,11 @@ enum Verify {
         name: String,
         /// The slot as it was before the rename, for the byte comparison.
         before: Option<Preset>,
+    },
+    UsbGain {
+        value: u8,
+        /// The live misc block before the write, for the byte comparison.
+        before: Option<[u8; protocol::REPORT_SIZE]>,
     },
     Restore {
         source: Vec<Preset>,
@@ -246,6 +272,9 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                 Ok(Cmd::Rename { bank, index, name }) => {
                     device_out.push_back(DeviceWrite::Rename { bank, index, name });
                 }
+                Ok(Cmd::UsbGain { value, frame }) => {
+                    device_out.push_back(DeviceWrite::UsbGain { value, frame });
+                }
                 Ok(Cmd::Restore { presets }) => {
                     restore = Some(RestoreJob::new(presets));
                     cancel_restore = false;
@@ -317,6 +346,18 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                                 bank: *bank,
                                 index: *index,
                                 name: name.clone(),
+                            });
+                        }
+                        DeviceWrite::UsbGain { value, frame } => {
+                            amp.write_report(frame)?;
+                            amp.write_report(&protocol::execute_model_change())?;
+                            let before = last_dump
+                                .as_ref()
+                                .and_then(|dump| dump.live_misc())
+                                .map(|misc| *misc.as_bytes());
+                            verify = Some(Verify::UsbGain {
+                                value: *value,
+                                before,
                             });
                         }
                         DeviceWrite::Rename { bank, index, name } => {
@@ -460,6 +501,11 @@ fn run(amp: &Amp, send: &impl Fn(Ev), rx: &Receiver<Cmd>) -> Result<()> {
                                         outcome,
                                     });
                                 }
+                                Some(Verify::UsbGain { value, before }) => {
+                                    let outcome =
+                                        verify_usb_gain(&done.dump, before.as_ref(), value);
+                                    send(Ev::UsbGainDone { outcome });
+                                }
                                 Some(Verify::Restore {
                                     source,
                                     partial,
@@ -554,6 +600,51 @@ fn finish_restore(
         cancelled,
     });
     *dump_soon = Some(now + Duration::from_millis(400));
+}
+
+/// Compare the live misc block with the USB gain that was written.
+///
+/// The gain sits at offset 16 of the `0x0D` misc report. The header (0..8) may
+/// move because the execute frame flips byte 7, but every other payload byte
+/// must stay where it was.
+fn verify_usb_gain(
+    dump: &Dump,
+    before: Option<&[u8; protocol::REPORT_SIZE]>,
+    value: u8,
+) -> Result<String, String> {
+    let Some(misc) = dump.live_misc() else {
+        return Err("The amp did not report its misc block after the write.".into());
+    };
+    let read = misc.byte(protocol::USB_GAIN_OFFSET);
+    if read != value {
+        return Err(format!(
+            "USB gain reads {read} ({}%), not {value} ({}%).",
+            percent(read),
+            percent(value)
+        ));
+    }
+    if let Some(before) = before {
+        for (offset, expected) in before.iter().enumerate().skip(protocol::PAYLOAD_START) {
+            if offset == protocol::USB_GAIN_OFFSET {
+                continue;
+            }
+            if misc.byte(offset) != *expected {
+                return Err(format!(
+                    "USB gain was written, but misc offset {offset} changed (0x{expected:02x} -> 0x{:02x}).",
+                    misc.byte(offset)
+                ));
+            }
+        }
+    }
+    Ok(format!(
+        "USB gain {value} ({}%) · read-back matches",
+        percent(value)
+    ))
+}
+
+/// 0..=255 as the 0..100% FUSE labels.
+pub(crate) fn percent(value: u8) -> u32 {
+    (u32::from(value) * 100 + 127) / 255
 }
 
 /// Lay values that arrived during a dump over its older copy of the live block.
@@ -1015,5 +1106,75 @@ mod tests {
         let error = verify_store(&dump, protocol::BANK_FX, 4, "Stored")
             .expect_err("the reverb kept an older value");
         assert!(error.contains("reverb offset 32"), "{error}");
+    }
+
+    fn misc_report(value: u8) -> [u8; REPORT_SIZE] {
+        let mut raw = [0u8; REPORT_SIZE];
+        raw[0] = FRAME_MARKER;
+        raw[1] = AMP_TO_HOST;
+        raw[2] = Kind::Misc.code();
+        raw[3] = BANK_LIVE;
+        raw[4] = 0x10;
+        raw[6] = 1;
+        raw[protocol::USB_GAIN_OFFSET] = value;
+        raw
+    }
+
+    fn dump_with_misc(value: u8) -> Dump {
+        let mut dump = Dump::new();
+        dump.add_raw(&misc_report(value));
+        dump
+    }
+
+    #[test]
+    fn a_matching_usb_gain_reads_back() {
+        let before = misc_report(128);
+        let dump = dump_with_misc(128);
+        let message = verify_usb_gain(&dump, Some(&before), 128).expect("the gain matches");
+        assert!(message.contains("50%"), "{message}");
+    }
+
+    #[test]
+    fn a_usb_gain_the_amp_ignored_is_an_error() {
+        let before = misc_report(64);
+        let dump = dump_with_misc(64);
+        let error =
+            verify_usb_gain(&dump, Some(&before), 128).expect_err("the amp kept the old gain");
+        assert!(error.contains("reads 64 (25%)"), "{error}");
+    }
+
+    #[test]
+    fn another_misc_byte_moving_is_an_error() {
+        let mut before = misc_report(128);
+        before[9] = 0x01;
+        let dump = dump_with_misc(128);
+        let error = verify_usb_gain(&dump, Some(&before), 128)
+            .expect_err("byte 9 moved without being asked");
+        assert!(error.contains("offset 9 changed"), "{error}");
+    }
+
+    #[test]
+    fn the_execute_flag_flipping_is_not_an_error() {
+        let mut before = misc_report(128);
+        before[7] = 0x00;
+        let mut after = misc_report(128);
+        after[7] = 0x01;
+        let mut dump = Dump::new();
+        dump.add_raw(&after);
+        assert!(verify_usb_gain(&dump, Some(&before), 128).is_ok());
+    }
+
+    #[test]
+    fn a_missing_misc_block_is_an_error() {
+        let dump = Dump::new();
+        let error = verify_usb_gain(&dump, None, 128).expect_err("there is no misc block to check");
+        assert!(error.contains("did not report its misc block"), "{error}");
+    }
+
+    #[test]
+    fn the_percent_mapping_covers_the_byte_range() {
+        assert_eq!(percent(0), 0);
+        assert_eq!(percent(255), 100);
+        assert_eq!(percent(128), 50);
     }
 }

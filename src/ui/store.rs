@@ -119,7 +119,7 @@ impl App {
     }
 
     fn open_store(&mut self, mode: StoreMode) {
-        if self.amp_busy() || self.restore_dialog_open() || self.import.is_some() {
+        if self.amp_busy() || self.dialog_open() {
             self.status = "Another amp operation is still running; try again in a moment.".into();
             return;
         }

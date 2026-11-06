@@ -50,6 +50,9 @@ pub const OFF_NAME: usize = 16;
 pub const OFF_PARAMS: usize = 32;
 pub const NAME_LEN: usize = 32;
 
+/// USB recording level inside the live buffer's `0x0D` misc block.
+pub const USB_GAIN_OFFSET: usize = 16;
+
 /// Bank numbers as reported in byte 3.
 pub const BANK_LIVE: u8 = 0;
 pub const BANK_AMP: u8 = 1;
@@ -75,7 +78,9 @@ mod message;
 mod notice;
 mod preset;
 
-pub use diff::{diff_dumps, diff_payload, diff_presets, models_missing_from, Change};
+pub use diff::{
+    diff_dumps, diff_payload, diff_presets, models_missing_from, Change, PAYLOAD_START,
+};
 pub use dump::Dump;
 pub use frames::{
     as_host_frame, boot_banner, bypass, execute_model_change, handshake_step1, handshake_step2,

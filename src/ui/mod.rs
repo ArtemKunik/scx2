@@ -34,6 +34,7 @@ mod theme;
 mod toolbar;
 mod tuner;
 mod units;
+mod usb_gain;
 mod view;
 mod worker;
 

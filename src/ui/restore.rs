@@ -45,8 +45,7 @@ pub(crate) struct RestoreDialog {
 impl App {
     /// Pick a backup and open the restore dialog for it.
     pub(super) fn open_restore_dialog(&mut self) {
-        if self.amp_busy() || self.store.is_some() || self.rename.is_some() || self.import.is_some()
-        {
+        if self.amp_busy() || self.dialog_open() {
             self.status = "Finish the open dialog or wait for the amp first.".into();
             return;
         }

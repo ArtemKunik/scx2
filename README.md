@@ -181,7 +181,10 @@ The `+` on the panel lists the front-panel set and, below it, the parameters onl
 control can reach (presence, resonance, master, bias, gate, sag, bright...).
 FUSE's own Super Champ X2 model table names most of them; the few that are
 still guesses say so in their hint. **Cabinet** is not a knob: it is chosen
-together with the voice in the amp & speaker picker. Every knob, hidden or not,
+together with the voice in the amp & speaker picker. The menu's **Device**
+section holds **USB Gain…**, the amp's USB recording level (raw 0–255, shown
+with its percentage): a device setting, written on its own and read back from
+the misc block. Every knob, hidden or not,
 can be removed.
 
 The knobs stay in sync with the amp. Turning a knob on the amp moves it on

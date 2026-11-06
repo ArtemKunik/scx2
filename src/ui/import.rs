@@ -53,11 +53,7 @@ pub(crate) struct ImportDialog {
 impl App {
     /// Pick a preset file and open the module picker.
     pub(super) fn open_import_dialog(&mut self) {
-        if self.amp_busy()
-            || self.store.is_some()
-            || self.rename.is_some()
-            || self.restore_dialog_open()
-        {
+        if self.amp_busy() || self.dialog_open() {
             self.status = "Finish the open dialog or wait for the amp first.".into();
             return;
         }

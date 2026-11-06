@@ -66,6 +66,7 @@ impl App {
             ui.memory_mut(|memory| memory.toggle_popup(popup));
         }
         let mut chosen = None;
+        let mut open_usb_gain = false;
         egui::popup_below_widget(ui, popup, &response, |ui| {
             ui.set_min_width(170.0);
             ui.spacing_mut().item_spacing.y = 2.0;
@@ -94,9 +95,28 @@ impl App {
                     }
                 }
             }
+            ui.separator();
+            ui.label(
+                egui::RichText::new("Device")
+                    .font(semibold(11.0))
+                    .color(Color32::from_rgb(120, 114, 105)),
+            );
+            if ui
+                .selectable_label(false, "USB Gain…")
+                .on_hover_text(
+                    "The amp's USB recording level, in the 0x0D misc block at offset 16.",
+                )
+                .clicked()
+            {
+                open_usb_gain = true;
+                ui.memory_mut(|memory| memory.close_popup());
+            }
         });
         if let Some(spec) = chosen {
             add_knob(&mut self.knobs, spec.offset);
+        }
+        if open_usb_gain {
+            self.open_usb_gain_dialog();
         }
     }
 }

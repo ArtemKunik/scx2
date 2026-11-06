@@ -117,6 +117,19 @@ impl Dump {
         self.presets.get(&(BANK_LIVE, 0))
     }
 
+    /// The live buffer's `0x0D` misc report, which is not tied to a preset.
+    pub fn live_misc(&self) -> Option<&Message> {
+        self.extras
+            .iter()
+            .find(|message| message.kind() == Kind::Misc && message.bank() == BANK_LIVE)
+    }
+
+    /// The amp's USB recording level, read from the live misc block.
+    pub fn usb_gain(&self) -> Option<u8> {
+        self.live_misc()
+            .map(|message| message.byte(USB_GAIN_OFFSET))
+    }
+
     pub fn get(&self, bank: u8, index: u8) -> Option<&Preset> {
         self.presets.get(&(bank, index))
     }
@@ -141,5 +154,35 @@ impl Dump {
             }).collect::<Vec<_>>(),
             "unparsed_hex": self.unparsed.iter().map(|r| hex(r)).collect::<Vec<_>>(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn misc(bank: u8, gain: u8) -> [u8; REPORT_SIZE] {
+        let mut raw = [0u8; REPORT_SIZE];
+        raw[0] = FRAME_MARKER;
+        raw[1] = AMP_TO_HOST;
+        raw[2] = Kind::Misc.code();
+        raw[3] = bank;
+        raw[4] = USB_GAIN_OFFSET as u8;
+        raw[6] = 1;
+        raw[USB_GAIN_OFFSET] = gain;
+        raw
+    }
+
+    #[test]
+    fn usb_gain_comes_from_the_live_misc_block() {
+        let dump = Dump::from_reports([misc(BANK_LIVE, 0x40)]);
+        assert_eq!(dump.usb_gain(), Some(0x40));
+    }
+
+    #[test]
+    fn a_stored_slot_misc_block_is_not_the_live_setting() {
+        let dump = Dump::from_reports([misc(BANK_AMP, 0x40)]);
+        assert!(dump.live_misc().is_none());
+        assert_eq!(dump.usb_gain(), None);
     }
 }

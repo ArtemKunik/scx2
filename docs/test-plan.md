@@ -255,6 +255,21 @@ The frame is the verified one; this checklist covers the dialog around it.
    power cycle.
 6. Offline, all three dialogs must print their frames as dry runs.
 
+### USB Gain (M4.1)
+
+1. Connect the amp and open **Parameters → + → Device → USB Gain…**. The
+   dialog must show the value the amp reports.
+2. Set a distinct value (say 64) and write. The status must read
+   `USB gain 64 (25%) · read-back matches`.
+3. Re-dump and confirm the misc block still holds that value, with every other
+   payload byte unchanged.
+4. Record over USB at two gain settings: the capture level must follow.
+5. Reconnect or power-cycle: the value must still be there.
+6. Disconnect and repeat: the status must show the dry-run frames, and nothing
+   is written.
+7. If the amp ignores the block write, capture the FUSE interaction and adjust
+   the direction/execute bytes before shipping.
+
 ### MIDI foot controller (M8.1)
 
 1. Connect a class-compliant MIDI controller, open **MIDI**, and confirm it is

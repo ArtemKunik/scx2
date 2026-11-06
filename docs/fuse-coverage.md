@@ -20,8 +20,8 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | --- | --- | --- |
 | Amp voice/model selection | yes | Fourteen SCX2 voices, model id follows the voice. |
 | Cabinet simulation | yes | FUSE's `Cab` at amp offset 49; choose it with the voice in the amp/speaker picker. |
-| Advanced amp controls | partial | Gain 2, Master, Presence, Resonance, gate, bias, sag and bright are there. **USB Gain** is not. |
-| USB Gain | missing | FUSE's SCX2 advanced panel has a USB GAIN knob. It lives in the `0x0D` misc block at offset 16. |
+| Advanced amp controls | yes | Gain 2, Master, Presence, Resonance, gate, bias, sag, bright and **USB Gain** (device setting). |
+| USB Gain | yes | **+ → Device → USB Gain…**: read from the `0x0D` misc block at offset 16, written as a block + execute, read back and compared byte for byte. |
 | Effect model selection | yes | Stomp, modulation, delay and reverb slots; click a slot for its focused editor. |
 | Effect parameters | yes | Big labelled controls per parameter, plus all 32 raw bytes with FUSE names. |
 | Effect bypass | yes | Verified `19 c3` frame; the model and settings stay loaded. |
@@ -61,7 +61,7 @@ only, **missing** = not in `scx2`, **blocked** = the SCX2/protocol cannot do it,
 | Effect bypass | yes | Verified fast frame. |
 | Firmware update | missing | `docs/firmware.md` documents the update file and boot mode, but `scx2` cannot enter boot mode or flash. |
 | Factory restore | missing | Not implemented. |
-| Audio Control Panel | partial | No USB gain control. FUSE's SCX2 advanced panel exposes USB GAIN; the rest of the menu is mostly OS audio setup. |
+| Audio Control Panel | partial | USB gain is exposed from the panel; the rest of FUSE's menu is mostly OS audio setup, so it stays in the OS. |
 | Amp-native tuner / mute | missing | FUSE drives the amp's own tuner and mute. `scx2` detects pitch from the USB audio input instead. |
 | Firmware version display | yes | The handshake banner shows the build string. |
 | About / check for updates | missing | Minor; FUSE had both. |
@@ -90,8 +90,8 @@ The largest remaining gaps are librarian/device operations, not sound editing:
    search/filter, previous/next and a "New Preset" action.
 3. **Partial import and sub-presets.** Done: the import dialog and the three
    save dialogs (effects, voice, CH1).
-4. **USB Gain.** Read and write the `0x0D` misc block at offset 16 and add a
-   knob to the advanced amp panel.
+4. **USB Gain.** Done: the misc block's offset 16 is read, written and checked
+   from the panel; one hardware check remains.
 5. **Preset metadata / local library.** Description, tags, genres, author and a
    searchable folder of presets.
 6. **Factory restore and firmware update.** Both need boot-mode work and are

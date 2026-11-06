@@ -323,6 +323,13 @@ save a voice to bank 1 and verify bank 2 is unchanged.
 
 **Goal:** FUSE's advanced USB GAIN control.
 
+**State:** shipped (2026-11-06). **Parameters → + → Device → USB Gain…** opens
+a slider over 0–255 (shown with its 0–100% equivalent), seeded from the live
+misc block. Writing sends the whole misc block with byte 16 replaced, plus an
+execute frame, then forces a dump and checks byte 16 and every other payload
+byte of the misc block. Offline it prints the frames as a dry run. The write
+direction is the normal block path, so one hardware check remains.
+
 **Protocol**
 
 * The live buffer's `0x0D` misc block carries USB Gain at offset 16.

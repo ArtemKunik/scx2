@@ -21,6 +21,7 @@ use super::rename::RenameDialog;
 use super::restore::RestoreDialog;
 use super::store::StoreDialog;
 use super::sync::Activity;
+use super::usb_gain::UsbGainDialog;
 use super::worker::{spawn_worker, Cmd, Ev};
 use super::{theme, DEMO_CAPTURE};
 // ---------------------------------------------------------------------------
@@ -101,6 +102,8 @@ pub struct App {
     pub(crate) rename: Option<RenameDialog>,
     /// The "Import Modules" dialog, when it is open.
     pub(crate) import: Option<ImportDialog>,
+    /// The "USB Gain" dialog, when it is open.
+    pub(crate) usb_gain: Option<UsbGainDialog>,
     /// The "Restore Backup" dialog, when it is open or running.
     pub(crate) restore: Option<RestoreDialog>,
     /// A device operation the worker has not confirmed yet, and what it was.
@@ -208,6 +211,7 @@ impl App {
             store: None,
             rename: None,
             import: None,
+            usb_gain: None,
             restore: None,
             waiting: None,
             synced_at: None,
@@ -333,6 +337,7 @@ impl App {
                 } => self.finish_operation(bank, index, outcome),
                 Ev::RestoreProgress { done, total } => self.on_restore_progress(done, total),
                 Ev::RestoreDone(report) => self.on_restore_done(report),
+                Ev::UsbGainDone { outcome } => self.on_usb_gain_done(outcome),
                 Ev::Warning(message) => self.error = Some(message),
                 Ev::Error(message) => {
                     let stopped_midway = self
@@ -385,6 +390,15 @@ impl App {
         if !self.flash.is_empty() {
             ctx.request_repaint_after(Duration::from_millis(33));
         }
+    }
+
+    /// True while any device or file dialog is open.
+    pub(crate) fn dialog_open(&self) -> bool {
+        self.store.is_some()
+            || self.rename.is_some()
+            || self.restore_dialog_open()
+            || self.import.is_some()
+            || self.usb_gain.is_some()
     }
 
     /// Show the slot an operation wrote, now that the dump has the amp's own
