@@ -42,7 +42,7 @@ machine with the amp attached.
 | `src/recorder.rs` | No change expected — `HOME` and `xdg-open` branches already exist. Verify the take path and folder opening |
 | `src/capture.rs` | Add the Linux `usbmon` (link type 220) reader; keep USBPcap |
 | `packaging/udev/70-scx2.rules` | New |
-| `.github/workflows/linux.yml`, `azure-pipelines.yml` | New; Azure is the current origin, GitHub is kept for a mirror |
+| `.github/workflows/linux.yml`, `.github/workflows/build.yml` | New; GitHub Actions runs the tests and builds the Linux and Windows release binaries |
 | `docs/test-plan.md`, `README.md` | Linux prerequisites and paths |
 
 Do not change the protocol, frame builders, `.fuse` handling, or the UI layout.
