@@ -1,0 +1,104 @@
+name: build
+
+# Builds the scx2 editor binary for Linux and Windows, uploads them as workflow
+# artifacts on every run, and attaches them to a GitHub Release when a v* tag
+# is pushed.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # The editor needs ALSA (cpal) and the window stack (eframe). HID uses
+      # hidapi's pure-Rust basic-udev backend, so no libudev-dev.
+      - name: System dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libasound2-dev \
+            libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+
+          version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -n1)
+          name="scx2-${version}-${TARGET}"
+          stage="dist/${name}"
+          mkdir -p "$stage"
+
+          bin="scx2"
+          if [ "$RUNNER_OS" = "Windows" ]; then bin="scx2.exe"; fi
+          cp "target/release/$bin" "$stage/"
+          cp README.md LICENSE "$stage/"
+
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            cp packaging/udev/70-scx2.rules packaging/udev/install.sh "$stage/"
+          fi
+
+          # shutil gives the same zip/gztar layout on both runners.
+          py=$(command -v python3 || command -v python)
+          "$py" - "$name" <<'PY'
+          import os, shutil, sys
+          name = sys.argv[1]
+          fmt = "zip" if os.name == "nt" else "gztar"
+          print(shutil.make_archive(name, fmt, "dist", name))
+          PY
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scx2-${{ matrix.name }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.tar.gz
+          generate_release_notes: true
+          fail_on_unmatched_files: true
