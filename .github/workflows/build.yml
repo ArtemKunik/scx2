@@ -80,7 +80,8 @@ jobs:
           import os, shutil, sys
           name = sys.argv[1]
           fmt = "zip" if os.name == "nt" else "gztar"
-          print(shutil.make_archive(name, fmt, "dist", name))
+          # base_name is the output path; root_dir/base_dir is what gets packed.
+          print(shutil.make_archive(os.path.join("dist", name), fmt, "dist", name))
           PY
 
       - name: Upload workflow artifact
